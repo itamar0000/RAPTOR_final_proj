@@ -37,7 +37,7 @@ class OllamaSummarizer(BaseSummarizationModel):
     SYSTEM_PROMPT = (
         "You are a precise summarization assistant. "
         "When given a passage, produce a concise, factually accurate summary "
-        "that preserves all key entities, relationships, and claims. "
+        "that preserves all key entities, relationships, dates, and numerical values. "
         "Do not add information not present in the passage."
     )
 
@@ -82,13 +82,26 @@ class OllamaSummarizer(BaseSummarizationModel):
 class OllamaQA(BaseQAModel):
     """
     Uses an Ollama chat model for the final answer-generation step.
-    Same model as summarization is fine; can also use a larger model here.
+
+    FIX #4: The original system prompt told the model to give up if the context
+    lacked information.  FRAMES questions require multi-hop reasoning — chaining
+    facts, doing arithmetic, resolving indirect references.  The new prompt
+    encourages the model to reason step-by-step over the retrieved context
+    rather than immediately refusing.
     """
 
     SYSTEM_PROMPT = (
-        "You are a helpful and precise question-answering assistant. "
-        "Answer the question using ONLY the information in the provided context. "
-        "If the context does not contain enough information, say so clearly."
+        "You are an expert research assistant specialising in multi-step reasoning. "
+        "You will be given a context (one or more Wikipedia passages) and a question "
+        "that may require chaining several facts together, resolving indirect references, "
+        "or performing simple arithmetic/comparisons.\n\n"
+        "Instructions:\n"
+        "1. Read the context carefully and identify all relevant facts.\n"
+        "2. Think step-by-step to connect those facts and answer the question.\n"
+        "3. Give a concise, direct final answer.\n"
+        "4. If a piece of information is genuinely absent from the context, state what "
+        "is missing and give the best partial answer you can from what is available.\n"
+        "Do NOT refuse to answer just because the question is complex."
     )
 
     def __init__(
@@ -113,7 +126,7 @@ class OllamaQA(BaseQAModel):
                     "content": (
                         f"Context:\n{context}\n\n"
                         f"Question: {question}\n\n"
-                        f"Answer:"
+                        f"Think step-by-step, then give your final answer:"
                     ),
                 },
             ],
@@ -154,6 +167,8 @@ class OllamaEmbedding(BaseEmbeddingModel):
         data = resp.json()
         # Ollama returns {"embeddings": [[...]], ...}
         embeddings = data.get("embeddings") or data.get("embedding")
+        if not embeddings:
+            raise ValueError(f"Ollama embed returned no embeddings for model '{self.model}'")
         if isinstance(embeddings[0], list):
             return embeddings[0]
         return embeddings

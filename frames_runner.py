@@ -1,8 +1,30 @@
 """
 FRAMES benchmark runner for RAPTOR with local Ollama models.
 
-Run:
-    python frames_runner.py --llm_model qwen2.5:7b-instruct --embed_model nomic-embed-text --max_samples 50
+New flags vs original:
+    --retrieval_mode   collapsed | traversal | bm25 | hybrid   (default: collapsed)
+    --use_reranker     flag — apply CrossEncoder reranking after retrieval
+    --reranker_model   HuggingFace model id (default: BAAI/bge-reranker-large)
+    --use_late_chunking flag — embed each leaf with document title as context prefix
+
+Retrieval modes explained:
+    collapsed  = flat cosine search over ALL nodes at once (RAPTOR default, collapse_tree=True)
+    traversal  = true top-down layer-by-layer tree search  (collapse_tree=False)
+    bm25       = keyword BM25 over leaf nodes only
+    hybrid     = RRF fusion of collapsed cosine + BM25
+
+Run examples:
+    # Default RAPTOR (collapsed cosine):
+    python frames_runner.py --retrieval_mode collapsed
+
+    # True hierarchical traversal:
+    python frames_runner.py --retrieval_mode traversal
+
+    # Hybrid + reranking:
+    python frames_runner.py --retrieval_mode hybrid --use_reranker
+
+    # Hybrid + late chunking + reranker:
+    python frames_runner.py --retrieval_mode hybrid --use_reranker --use_late_chunking
 """
 
 import ast
@@ -11,7 +33,6 @@ import time
 import argparse
 import re
 import logging
-import shutil
 from pathlib import Path
 
 import requests
@@ -21,146 +42,203 @@ from tqdm import tqdm
 from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
 from ollama_models import OllamaSummarizer, OllamaQA, OllamaEmbedding
 
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
+WIKI_API = "https://en.wikipedia.org/w/api.php"
+WIKI_HEADERS = {"User-Agent": "RAPTOR-FRAMES-Eval/1.0"}
+TEXT_CACHE = {}
 
-# ------------------------------------------------------------------------------
-# Wikipedia fetcher
-# ------------------------------------------------------------------------------
 
-def fetch_wikipedia_text(title: str) -> str:
+# ──────────────────────────────────────────────────────────────────────────────
+# Wikipedia helpers (unchanged)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _fetch_by_title(title):
     params = {
-        "action": "query",
-        "prop": "extracts",
-        "exintro": False,
-        "explaintext": True,
-        "redirects": True,
-        "titles": title,
-        "format": "json",
+        "action": "query", "prop": "extracts", "exintro": False,
+        "explaintext": True, "redirects": True,
+        "titles": title, "format": "json",
     }
-    resp = requests.get(
-        "https://en.wikipedia.org/w/api.php",
-        params=params,
-        timeout=30,
-        headers={"User-Agent": "RAPTOR-FRAMES-Eval/1.0"},
-    )
+    resp = requests.get(WIKI_API, params=params, timeout=30, headers=WIKI_HEADERS)
     resp.raise_for_status()
     pages = resp.json()["query"]["pages"]
     page = next(iter(pages.values()))
+    if str(page.get("pageid", -1)) == "-1":
+        return ""
     return page.get("extract", "")
 
 
-def title_from_url(url: str) -> str:
+def _search_title(query):
+    params = {
+        "action": "opensearch", "search": query, "limit": 1,
+        "redirects": "resolve", "format": "json",
+    }
+    resp = requests.get(WIKI_API, params=params, timeout=15, headers=WIKI_HEADERS)
+    resp.raise_for_status()
+    data = resp.json()
+    titles = data[1] if len(data) > 1 else []
+    return titles[0] if titles else None
+
+
+def fetch_wikipedia_text(title):
+    cache_key = title.lower().strip()
+    if cache_key in TEXT_CACHE:
+        return TEXT_CACHE[cache_key]
+
+    text = _fetch_by_title(title)
+    if not text or not text.strip():
+        log.info("Direct lookup empty for '%s', trying OpenSearch...", title)
+        resolved = _search_title(title)
+        if resolved and resolved.lower() != title.lower():
+            log.info("OpenSearch resolved '%s' -> '%s'", title, resolved)
+            text = _fetch_by_title(resolved)
+
+    if not text or not text.strip():
+        log.warning("No Wikipedia text found for: '%s'", title)
+
+    TEXT_CACHE[cache_key] = text
+    return text
+
+
+def title_from_url(url):
     match = re.search(r"wikipedia\.org/wiki/(.+)$", url)
     if match:
         return match.group(1).replace("_", " ")
     return url.split("/")[-1].replace("_", " ")
 
 
-def parse_wiki_links(raw) -> list:
-    """
-    Parse wiki_links regardless of how FRAMES stores it.
-    Handles: real list, Python list-literal string, newline-separated string.
-    Only returns valid wikipedia.org/wiki/ URLs.
-    """
+def parse_wiki_links(raw):
     if raw is None:
         return []
-
-    # Already a real list or tuple
     if isinstance(raw, (list, tuple)):
         candidates = [str(x).strip() for x in raw]
-
     elif isinstance(raw, str):
         s = raw.strip()
         if s.startswith("["):
-            # Python literal: "['https://en.wikipedia.org/wiki/Foo', ...]"
             try:
                 parsed = ast.literal_eval(s)
                 candidates = [str(x).strip() for x in parsed]
             except Exception:
                 candidates = []
         elif "\n" in s:
-            candidates = [l.strip() for l in s.splitlines()]
+            candidates = [line.strip() for line in s.splitlines()]
         else:
             candidates = [s]
     else:
         candidates = []
-
     return [c for c in candidates if c and "wikipedia.org/wiki/" in c]
 
 
-# ------------------------------------------------------------------------------
-# Tree builder  (Memory Cached to bypass RAPTOR disk load bugs)
-# ------------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# Tree building
+# ──────────────────────────────────────────────────────────────────────────────
 
-TREE_CACHE = {}
+def build_unified_tree(wiki_links, config, use_late_chunking: bool = False):
+    """
+    Fetches Wikipedia articles, concatenates them, and builds a RAPTOR tree.
 
-def build_or_load_tree(article_title: str, tree_dir: Path, config):
-    safe_name = re.sub(r"[^\w\-]", "_", article_title)[:80].strip("_")
-    if len(safe_name) < 3:
-        log.warning(f"Skipping short/invalid title: '{article_title}'")
+    Args:
+        wiki_links        : List of Wikipedia URLs for this question.
+        config            : RetrievalAugmentationConfig.
+        use_late_chunking : If True, pass a doc_title to add_documents so that
+                            leaf embeddings are built with title context.
+    """
+    texts = []
+    titles = []
+    for url in wiki_links:
+        title = title_from_url(url)
+        if len(re.sub(r"[^\w]", "", title)) < 3:
+            log.warning("Skipping short title: '%s'", title)
+            continue
+        text = fetch_wikipedia_text(title)
+        if text and text.strip():
+            texts.append("=== " + title + " ===\n\n" + text.strip())
+            titles.append(title)
+        else:
+            log.warning("No text retrieved for: '%s'", title)
+
+    if not texts:
         return None
 
-    # Check RAM cache first
-    if safe_name in TREE_CACHE:
-        log.info(f"Using memory-cached tree for: {safe_name}")
-        return TREE_CACHE[safe_name]
+    combined = "\n\n\n".join(texts)
+    # Use a composite title for late chunking context (first article title)
+    doc_title = titles[0] if titles else "Document"
 
-    log.info(f"Building tree for: {article_title}")
-    text = fetch_wikipedia_text(article_title)
-    if not text or not text.strip():
-        log.warning(f"Empty Wikipedia article for: {article_title}")
-        return None
+    log.info(
+        "Building RAPTOR tree over %d article(s) (%d chars) | mode=%s | reranker=%s | late_chunking=%s",
+        len(texts), len(combined),
+        config.retrieval_mode, config.use_reranker, config.use_late_chunking
+    )
 
-    # Build fresh tree
     ra = RetrievalAugmentation(config=config)
-    ra.add_documents(text)
-    
-    # Store in memory cache
-    TREE_CACHE[safe_name] = ra
+    # Pass doc_title — only used when use_late_chunking=True
+    ra.add_documents(combined, doc_title=doc_title)
     return ra
 
 
-# ------------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# Output filename builder
+# ──────────────────────────────────────────────────────────────────────────────
+
+def build_output_filename(args) -> str:
+    """
+    Generates a descriptive filename that encodes all evaluation flags
+    so results from different configurations never overwrite each other.
+
+    Example: raptor_hybrid_reranker_latechunk_frames_results.jsonl
+    """
+    parts = ["raptor", args.retrieval_mode]
+    if args.use_reranker:
+        parts.append("reranker")
+    if args.use_late_chunking:
+        parts.append("latechunk")
+    parts.append("frames_results.jsonl")
+    return "_".join(parts)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Main runner
-# ------------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
 
 def run(args):
-    output_dir  = Path(args.output_dir)
-    tree_dir    = output_dir / "trees"
-    results_path = output_dir / "raptor_frames_results.jsonl"
+    output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Descriptive filename so configs don't overwrite each other
+    results_filename = build_output_filename(args)
+    results_path = output_dir / results_filename
+    log.info(f"Results will be saved to: {results_path}")
+
+    # ── Build config with all new retrieval flags ─────────────────────────────
     config = RetrievalAugmentationConfig(
         summarization_model=OllamaSummarizer(model=args.llm_model),
         qa_model=OllamaQA(model=args.llm_model),
         embedding_model=OllamaEmbedding(model=args.embed_model),
+        # NEW: wire in all retrieval options
+        retrieval_mode=args.retrieval_mode,
+        use_reranker=args.use_reranker,
+        reranker_model=args.reranker_model,
+        use_late_chunking=args.use_late_chunking,
     )
 
-    # Load dataset
     log.info("Loading google/frames-benchmark ...")
     ds = load_dataset("google/frames-benchmark", split="test")
-    log.info(f"Columns: {ds.column_names}")
-    log.info(f"First row sample: { {k: str(v)[:120] for k, v in ds[0].items()} }")
-
     if args.max_samples > 0:
         ds = ds.select(range(min(args.max_samples, len(ds))))
-    log.info(f"Running on {len(ds)} samples")
+    log.info("Running on %d samples", len(ds))
 
-    # Auto-detect field names
     cols = ds.column_names
     question_field = next((c for c in cols if c.lower() in ("prompt", "question")), cols[0])
     answer_field   = next((c for c in cols if c.lower() in ("answer", "gold_answer")), cols[1])
     links_field    = next(
         (c for c in cols if any(k in c.lower() for k in ("wiki", "link", "url", "source"))),
-        None
+        None,
     )
-    log.info(f"Using -> question:'{question_field}'  answer:'{answer_field}'  links:'{links_field}'")
+    log.info("Fields -> question:'%s'  answer:'%s'  links:'%s'",
+             question_field, answer_field, links_field)
 
-    qa_model = OllamaQA(model=args.llm_model)
-    results  = []
+    results = []
 
     for row in tqdm(ds, desc="FRAMES questions"):
         question    = row[question_field]
@@ -169,79 +247,84 @@ def run(args):
         wiki_links  = parse_wiki_links(raw_links)
 
         if not wiki_links:
-            log.warning(f"No valid wiki links for: {question[:80]}")
-            log.warning(f"  raw links value: {repr(raw_links)[:300]}")
+            log.warning("No valid wiki links for: %s", question[:80])
             results.append({
                 "question":      question,
                 "gold_answer":   gold_answer,
                 "raptor_answer": "",
+                "wiki_links":    [],
+                "retrieval_mode": args.retrieval_mode,
+                "use_reranker":  args.use_reranker,
+                "use_late_chunking": args.use_late_chunking,
                 "error":         "no_wiki_links",
             })
             continue
 
-        per_article_answers = []
-
-        for url in wiki_links:
-            title = title_from_url(url)
-            try:
-                ra = build_or_load_tree(title, tree_dir, config)
-                if ra is None:
-                    continue
-                # answer_question is the correct public API on RetrievalAugmentation
-                answer = ra.answer_question(question=question)
-                per_article_answers.append(answer)
-                time.sleep(0.3)
-            except Exception as e:
-                log.warning(f"Error on '{title}': {e}")
+        try:
+            ra = build_unified_tree(wiki_links, config, args.use_late_chunking)
+            if ra is None:
+                results.append({
+                    "question":      question,
+                    "gold_answer":   gold_answer,
+                    "raptor_answer": "",
+                    "wiki_links":    wiki_links,
+                    "retrieval_mode": args.retrieval_mode,
+                    "use_reranker":  args.use_reranker,
+                    "use_late_chunking": args.use_late_chunking,
+                    "error":         "all_articles_empty",
+                })
                 continue
 
-        if not per_article_answers:
+            final_answer = ra.answer_question(question=question)
+
+        except Exception as e:
+            log.warning("Error on '%s': %s", question[:80], e, exc_info=True)
             results.append({
                 "question":      question,
                 "gold_answer":   gold_answer,
                 "raptor_answer": "",
-                "error":         "all_trees_failed",
+                "wiki_links":    wiki_links,
+                "retrieval_mode": args.retrieval_mode,
+                "use_reranker":  args.use_reranker,
+                "use_late_chunking": args.use_late_chunking,
+                "error":         "exception: " + str(e),
             })
             continue
 
-        # Single article — use its answer directly
-        # Multiple articles — do one synthesis pass
-        if len(per_article_answers) == 1:
-            final_answer = per_article_answers[0]
-        else:
-            try:
-                final_answer = qa_model.answer_question(
-                    context="\n\n---\n\n".join(per_article_answers),
-                    question=question,
-                )
-            except Exception as e:
-                log.warning(f"Synthesis error: {e}")
-                final_answer = per_article_answers[0]
-
         results.append({
-            "question":             question,
-            "gold_answer":          gold_answer,
-            "raptor_answer":        final_answer,
-            "per_article_answers":  per_article_answers,
+            "question":      question,
+            "gold_answer":   gold_answer,
+            "raptor_answer": final_answer,
+            "wiki_links":    wiki_links,
+            "retrieval_mode": args.retrieval_mode,
+            "use_reranker":  args.use_reranker,
+            "use_late_chunking": args.use_late_chunking,
         })
 
-    # Write results — UTF-8 explicit to handle non-ASCII characters on Windows
+        time.sleep(0.3)
+
+    # Save results
     with open(results_path, "w", encoding="utf-8") as f:
         for r in results:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     answered = sum(1 for r in results if r.get("raptor_answer"))
-    log.info(f"Done. {len(results)} total | {answered} answered | saved -> {results_path}")
+    log.info(
+        "Done. %d total | %d answered | mode=%s | reranker=%s | late_chunking=%s | saved -> %s",
+        len(results), answered,
+        args.retrieval_mode, args.use_reranker, args.use_late_chunking,
+        results_path
+    )
 
     if args.score:
-        score_with_ragas(results, output_dir, args)
+        _score_with_ragas(results, output_dir, args)
 
 
-# ------------------------------------------------------------------------------
-# Ragas scoring
-# ------------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# Ragas scoring (unchanged logic, updated field detection)
+# ──────────────────────────────────────────────────────────────────────────────
 
-def score_with_ragas(results: list, output_dir: Path, args):
+def _score_with_ragas(results, output_dir, args):
     try:
         from ragas import evaluate
         from ragas.metrics import answer_correctness, faithfulness, context_precision
@@ -250,10 +333,10 @@ def score_with_ragas(results: list, output_dir: Path, args):
         from ragas.llms import LangchainLLMWrapper
         from ragas.embeddings import LangchainEmbeddingsWrapper
     except ImportError as e:
-        log.warning(f"Missing dependency for scoring: {e}")
+        log.warning("Missing dependency for scoring: %s", e)
         return
 
-    valid = [r for r in results if r.get("raptor_answer") and r.get("per_article_answers")]
+    valid = [r for r in results if r.get("raptor_answer") and r.get("wiki_links")]
     if not valid:
         log.warning("No valid results to score.")
         return
@@ -263,31 +346,73 @@ def score_with_ragas(results: list, output_dir: Path, args):
 
     result = evaluate(
         Dataset.from_dict({
-            "question":     [r["question"]             for r in valid],
-            "answer":       [r["raptor_answer"]        for r in valid],
-            "contexts":     [r["per_article_answers"]  for r in valid],
-            "ground_truth": [r["gold_answer"]          for r in valid],
+            "question":     [r["question"]      for r in valid],
+            "answer":       [r["raptor_answer"] for r in valid],
+            "contexts":     [r["wiki_links"]    for r in valid],
+            "ground_truth": [r["gold_answer"]   for r in valid],
         }),
         metrics=[answer_correctness, faithfulness, context_precision],
         llm=llm,
         embeddings=emb,
     )
 
-    scores_path = output_dir / "ragas_scores.json"
+    scores_filename = build_output_filename(args).replace("_results.jsonl", "_ragas_scores.json")
+    scores_path = output_dir / scores_filename
     with open(scores_path, "w", encoding="utf-8") as f:
         json.dump(dict(result), f, indent=2)
-    log.info(f"Ragas scores saved -> {scores_path}")
+    log.info("Ragas scores saved -> %s", scores_path)
     for k, v in result.items():
         print(f"  {k}: {v:.4f}")
 
 
-# ------------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI
+# ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RAPTOR on FRAMES with local Ollama")
-    parser.add_argument("--llm_model",   default="qwen2.5:7b-instruct")
-    parser.add_argument("--embed_model", default="nomic-embed-text")
-    parser.add_argument("--max_samples", type=int, default=50)
-    parser.add_argument("--output_dir",  default="results/raptor")
-    parser.add_argument("--score",       action="store_true")
+    parser = argparse.ArgumentParser(
+        description="RAPTOR on FRAMES benchmark with configurable retrieval"
+    )
+    parser.add_argument("--llm_model",    default="qwen2.5:7b-instruct",
+                        help="Ollama LLM for summarization and QA")
+    parser.add_argument("--embed_model",  default="nomic-embed-text",
+                        help="Ollama embedding model")
+    parser.add_argument("--max_samples",  type=int, default=50,
+                        help="Number of FRAMES questions to evaluate (0 = all)")
+    parser.add_argument("--output_dir",   default="results/raptor",
+                        help="Directory to save results JSONL")
+    parser.add_argument("--score",        action="store_true",
+                        help="Run Ragas scoring after evaluation")
+
+    # ── NEW retrieval flags ───────────────────────────────────────────────────
+    parser.add_argument(
+        "--retrieval_mode",
+        default="hybrid",
+        choices=["collapsed", "traversal", "bm25", "hybrid"],
+        help=(
+            "collapsed  = flat cosine over all nodes (RAPTOR default)\n"
+            "traversal  = true top-down layer-by-layer tree search\n"
+            "bm25       = keyword BM25 over leaf nodes only\n"
+            "hybrid     = RRF fusion of collapsed cosine + BM25"
+        )
+    )
+    parser.add_argument(
+        "--use_reranker",
+        action="store_true",
+        help="Apply CrossEncoder reranking after initial retrieval"
+    )
+    parser.add_argument(
+        "--reranker_model",
+        default="BAAI/bge-reranker-large",
+        help="HuggingFace CrossEncoder model for reranking"
+    )
+    parser.add_argument(
+        "--use_late_chunking",
+        action="store_true",
+        help=(
+            "Embed each leaf node with its document title prepended as context "
+            "(late chunking — improves cross-chunk coherence)"
+        )
+    )
+
     run(parser.parse_args())
