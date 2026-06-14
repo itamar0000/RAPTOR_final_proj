@@ -181,7 +181,7 @@ def run(args):
     question_field = next((c for c in cols if "question" in c.lower()), None)
     options_field  = next((c for c in cols if c.lower() in ("options", "choices")), None)
     gold_field     = next(
-        (c for c in cols if c.lower() in ("gold_label", "writer_label", "turker_label", "gold", "label")),
+        (c for c in cols if c.lower() in ("gold_label", "writer_label", "turker_label", "gold", "label", "answer")),
         None,
     )
     log.info("Fields -> article:'%s' question:'%s' options:'%s' gold:'%s'",

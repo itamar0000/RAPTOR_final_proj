@@ -152,7 +152,12 @@ def run(args):
     article_field  = next((c for c in cols if c.lower() in ("article", "document", "context", "text")), cols[0])
     question_field = next((c for c in cols if "question" in c.lower()), None)
     options_field  = next((c for c in cols if c.lower() in ("options", "choices")), None)
-    gold_field     = next((c for c in cols if "gold" in c.lower() or "label" in c.lower()), None)
+    # QuALITY uses writer_label (author's answer) or gold_label — try both
+    gold_field = next(
+        (c for c in cols if c.lower() in ("gold_label", "writer_label", "turker_label", "gold", "label", "answer", "correct_answer")),
+        None,
+    )
+    log.info("All columns: %s", cols)
     log.info("Using fields -> article:'%s'  question:'%s'  options:'%s'  gold:'%s'",
              article_field, question_field, options_field, gold_field)
 
@@ -167,8 +172,14 @@ def run(args):
         article      = row.get(article_field, "") or ""
         question     = row.get(question_field, "") if question_field else ""
         options      = row.get(options_field, [])  if options_field  else []
-        gold_raw     = row.get(gold_field)          if gold_field     else None
-        gold_letter  = gold_to_letter(gold_raw)
+        gold_raw = row.get(gold_field) if gold_field else None
+        # Some QuALITY rows have None in gold_label but a value in writer_label
+        if gold_raw is None:
+            for fallback in ("writer_label", "gold_label", "turker_label"):
+                if fallback in row and row[fallback] is not None:
+                    gold_raw = row[fallback]
+                    break
+        gold_letter = gold_to_letter(gold_raw)
 
         # ── Empty article ────────────────────────────────────────────────────
         if not article.strip():
