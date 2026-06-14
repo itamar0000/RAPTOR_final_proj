@@ -102,10 +102,11 @@ def fetch_wikipedia_text(title):
 
 
 def title_from_url(url):
+    from urllib.parse import unquote
     match = re.search(r"wikipedia\.org/wiki/(.+)$", url)
     if match:
-        return match.group(1).replace("_", " ")
-    return url.split("/")[-1].replace("_", " ")
+        return unquote(match.group(1)).replace("_", " ")
+    return unquote(url.split("/")[-1]).replace("_", " ")
 
 
 def parse_wiki_links(raw):
