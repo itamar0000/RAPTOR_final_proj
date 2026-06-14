@@ -261,9 +261,9 @@ if __name__ == "__main__":
                         help="Ollama embedding model")
     parser.add_argument("--max_samples",    type=int, default=100,
                         help="Number of questions to run (0 = full dataset)")
-    parser.add_argument("--split",          default="validation",
+    parser.add_argument("--split",          default="train",
                         choices=["train", "validation", "test"],
-                        help="Dataset split to use")
+                        help="Dataset split to use (validation/test withhold gold labels)")
     parser.add_argument("--output_dir",     default="results/quality",
                         help="Directory to save results JSONL")
     parser.add_argument("--retrieval_mode", default="collapsed",
