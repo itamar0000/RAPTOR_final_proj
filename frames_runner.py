@@ -172,8 +172,7 @@ def build_unified_tree(wiki_links, config, use_late_chunking: bool = False):
     )
 
     ra = RetrievalAugmentation(config=config)
-    # Pass doc_title — only used when use_late_chunking=True
-    ra.add_documents(combined, doc_title=doc_title)
+    ra.add_documents(combined)
     return ra
 
 
@@ -215,12 +214,13 @@ def run(args):
         summarization_model=OllamaSummarizer(model=args.llm_model),
         qa_model=OllamaQA(model=args.llm_model),
         embedding_model=OllamaEmbedding(model=args.embed_model),
-        # NEW: wire in all retrieval options
-        retrieval_mode=args.retrieval_mode,
-        use_reranker=args.use_reranker,
-        reranker_model=args.reranker_model,
-        use_late_chunking=args.use_late_chunking,
     )
+    # Store retrieval flags as plain attributes — the RAPTOR library doesn't
+    # expose these in __init__, but build_unified_tree reads them from config.
+    config.retrieval_mode   = args.retrieval_mode
+    config.use_reranker     = args.use_reranker
+    config.reranker_model   = args.reranker_model
+    config.use_late_chunking = args.use_late_chunking
 
     log.info("Loading google/frames-benchmark ...")
     ds = load_dataset("google/frames-benchmark", split="test")
