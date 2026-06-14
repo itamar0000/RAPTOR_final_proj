@@ -1,0 +1,1482 @@
+{
+  "summary": {
+    "total_questions": 50,
+    "nonblank_raptor_answers": 47,
+    "pipeline_errors": 3,
+    "insufficient_context_refusals": 45,
+    "gold_string_found_in_answer": 2,
+    "rows_with_logged_per_article_answers": 47,
+    "status_counts": {
+      "Insufficient retrieved context": 45,
+      "Pipeline error": 3,
+      "Answered, likely unsupported/incorrect": 2
+    },
+    "per_article_answer_counts": {
+      "1": 47,
+      "0": 3
+    },
+    "tree_files": 41,
+    "tree_nodes_extracted": 60
+  },
+  "diagnosis": [
+    {
+      "priority": "P0",
+      "issue": "Exact retrieved RAG context was not saved",
+      "evidence": "frames_runner.py stores question, gold_answer, raptor_answer, error, and per_article_answers only. It never calls RA.retrieve(..., return_layer_information=True) or logs the context passed into qa_model.answer_question.",
+      "impact": "You cannot audit which chunks the LLM saw for each benchmark row after the run. Only answers and saved tree node pools are recoverable.",
+      "code_reference": "frames_runner.py:190-225"
+    },
+    {
+      "priority": "P0",
+      "issue": "The LLM is usually refusing because the retrieved context is incomplete",
+      "evidence": "45 of 50 rows contain refusal language such as 'context does not contain enough information'.",
+      "impact": "The QA prompt in ollama_models.py explicitly requires using only provided context, so when retrieval misses a needed hop/fact the model correctly says it cannot answer.",
+      "code_reference": "ollama_models.py:89-91, 106-126"
+    },
+    {
+      "priority": "P1",
+      "issue": "Per-article answers are being used as evaluation contexts",
+      "evidence": "score_with_ragas passes r['per_article_answers'] as the RAGAS contexts, but those are generated answers, not retrieved passages.",
+      "impact": "RAGAS context_precision/faithfulness results would be measuring against model outputs instead of the source context.",
+      "code_reference": "frames_runner.py:256-273"
+    },
+    {
+      "priority": "P1",
+      "issue": "The tree_dir argument is dead code in the current runner",
+      "evidence": "build_or_load_tree(article_title, tree_dir, config) accepts tree_dir but never saves to it or loads from it; only TREE_CACHE in memory is used.",
+      "impact": "Runs are slow and non-reproducible, and existing tree files are not tied back to result rows.",
+      "code_reference": "frames_runner.py:95-123, 132"
+    },
+    {
+      "priority": "P2",
+      "issue": "Current local Ollama server is not reachable",
+      "evidence": "A local call to http://localhost:11434/api/tags failed with 'Unable to connect to the remote server'.",
+      "impact": "The current machine cannot reproduce retrieval embeddings or LLM answers until Ollama is running with the configured models.",
+      "code_reference": "ollama_models.py:20, 73, 126, 153"
+    }
+  ],
+  "results": [
+    {
+      "row": 1,
+      "question": "If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name? ",
+      "gold_answer": "Jane Ballou",
+      "raptor_answer": "The context provided does not contain enough information to determine your future wife's name. The details about the 15th first lady's mother and the second assassinated president's mother's maiden name are not given. Therefore, I cannot answer the question based on the information available.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain enough information to determine your future wife's name. The details about the 15th first lady's mother and the second assassinated president's mother's maiden name are not given. Therefore, I cannot answer the question based on the information available.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 2,
+      "question": "Imagine there is a building called Bronte tower whose height in feet is the same number as the dewey decimal classification for the Charlotte Bronte book that was published in 1847. Where would this building rank among tallest buildings in New York City, as of August 2024?",
+      "gold_answer": "37th",
+      "raptor_answer": "",
+      "error": "all_trees_failed",
+      "status": "Pipeline error",
+      "per_article_answer_count": 0,
+      "logged_context_for_final_synthesis": "",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 3,
+      "question": "How many years earlier would Punxsutawney Phil have to be canonically alive to have made a Groundhog Day prediction in the same state as the US capitol?",
+      "gold_answer": "87",
+      "raptor_answer": "The context provided does not contain enough information to determine how many years earlier Punxsutawney Phil would need to be canonically alive to make a Groundhog Day prediction in the same state as the U.S. Capitol. The location of Punxsutawney, Pennsylvania, where Phil resides, is specified, but no information about predictions made in other states or the relationship between these locations and the U.S. Capitol is given.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain enough information to determine how many years earlier Punxsutawney Phil would need to be canonically alive to make a Groundhog Day prediction in the same state as the U.S. Capitol. The location of Punxsutawney, Pennsylvania, where Phil resides, is specified, but no information about predictions made in other states or the relationship between these locations and the U.S. Capitol is given.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 4,
+      "question": "As of August 1, 2024, which country were holders of the FIFA World Cup the last time the UEFA Champions League was won by a club from London?",
+      "gold_answer": "France",
+      "raptor_answer": "The context provided does not contain information about when the UEFA Champions League was won by a club from London or any connection between the UEFA Champions League and the FIFA World Cup winners. Therefore, I cannot answer the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about when the UEFA Champions League was won by a club from London or any connection between the UEFA Champions League and the FIFA World Cup winners. Therefore, I cannot answer the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 5,
+      "question": "What is the name of the vocalist from the first band to make it in the top 200 under the record label that produced the third studio album for Dismal Euphony?",
+      "gold_answer": "Jens Kidman",
+      "raptor_answer": "The provided context does not contain enough information to answer the question. Specifically, it does not mention any vocalist names or details about a record label producing an album for Dismal Euphony, nor does it provide information about bands making it into the top 200 under any record label.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain enough information to answer the question. Specifically, it does not mention any vocalist names or details about a record label producing an album for Dismal Euphony, nor does it provide information about bands making it into the top 200 under any record label.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 6,
+      "question": "According to the 2000 United States census, what was the 2000 population of the birth city of the only 21st-century mayor of Austin, Texas who also served as mayor in the 1990s? Round your answer to the nearest thousand.",
+      "gold_answer": "506000",
+      "raptor_answer": "The provided context does not contain information about the population of any city during the 2000 United States census or the birthplace of Kirk Watson. Therefore, I cannot provide an answer to the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain information about the population of any city during the 2000 United States census or the birthplace of Kirk Watson. Therefore, I cannot provide an answer to the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 7,
+      "question": "I have an element in mind and would like you to identify the person it was named after. Here's a clue: The element's atomic number is 9 higher than that of an element discovered by the scientist who discovered Zirconium in the same year.",
+      "gold_answer": "Mendelevium is named after Dmitri Mendeleev.",
+      "raptor_answer": "Based on the provided context, there isn't enough information to determine which specific scientist and element are being referred to. The context mentions zirconium was first identified in 1789 but does not provide details about another element discovered by a scientist in the same year whose name might be associated with zirconium's nomenclature. Therefore, I cannot identify the person after whom the element was named based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "Based on the provided context, there isn't enough information to determine which specific scientist and element are being referred to. The context mentions zirconium was first identified in 1789 but does not provide details about another element discovered by a scientist in the same year whose name might be associated with zirconium's nomenclature. Therefore, I cannot identify the person after whom the element was named based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 8,
+      "question": "As of Aug 3, 2024, the artist who released the album \"Father of Asahd\" went to the same high school as an Olympic diver. How many Olympic teams did this diver participate on?",
+      "gold_answer": "2",
+      "raptor_answer": "The provided context does not contain any information about DJ Khaled attending the same high school as an Olympic diver or about any Olympic diver's participation in teams. Therefore, I cannot determine how many Olympic teams this diver participated on based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain any information about DJ Khaled attending the same high school as an Olympic diver or about any Olympic diver's participation in teams. Therefore, I cannot determine how many Olympic teams this diver participated on based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 9,
+      "question": "A general motors vehicle is named after the largest ward in the country of Monaco.  How many people had walked on the moon as of the first model year of the vehicle? Note: the model year is not the same as the year the model was first produced.",
+      "gold_answer": "4",
+      "raptor_answer": "The context provided does not contain any information about a general motors vehicle being named after the largest ward in Monaco or about the number of people who have walked on the moon. Therefore, I cannot answer this question based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about a general motors vehicle being named after the largest ward in Monaco or about the number of people who have walked on the moon. Therefore, I cannot answer this question based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 10,
+      "question": "The Pope born Pietro Barbo ended a long-running war two years after his papacy began, which famous conflict, immortalized in tapestry took place 400 years earlier?",
+      "gold_answer": "The Battle of Hastings.",
+      "raptor_answer": "The context provided does not contain any information about a war that Pope Paul II ended or any wars for that matter. There is also no mention of a famous conflict immortalized in tapestries from 400 years earlier. Therefore, I cannot answer the question based on the given context alone.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about a war that Pope Paul II ended or any wars for that matter. There is also no mention of a famous conflict immortalized in tapestries from 400 years earlier. Therefore, I cannot answer the question based on the given context alone.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 11,
+      "question": "An Australian artist, born the same year as artist Janet Cumbrae Stewart and fellow member of the Melbourne Society of Women Painters and Sculptors, had her painting featured on the cover of Women's World Magazine in 1923. What is the name of the painting?",
+      "gold_answer": "Reve d'Or",
+      "raptor_answer": "The context provided does not contain enough information to determine the name of the painting featured on the cover of Women's World Magazine in 1923 by an Australian artist who was a member of the Melbourne Society of Women Painters and Sculptors. The given context only mentions Janet Agnes Cumbrae Stewart, but does not provide details about her paintings or those of other artists from the same society.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain enough information to determine the name of the painting featured on the cover of Women's World Magazine in 1923 by an Australian artist who was a member of the Melbourne Society of Women Painters and Sculptors. The given context only mentions Janet Agnes Cumbrae Stewart, but does not provide details about her paintings or those of other artists from the same society.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 12,
+      "question": "As of July 1, 2024, what is the parent company of the current record label of the singer of Edge of Seventeen?",
+      "gold_answer": "Warner Music Group",
+      "raptor_answer": "The context provided does not contain information about the current record label of Stevie Nicks or its parent company as of July 1, 2024. Therefore, I cannot answer the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the current record label of Stevie Nicks or its parent company as of July 1, 2024. Therefore, I cannot answer the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 13,
+      "question": "The Basibasy mine is located in Madagascar. This mine is abundant in a specific chemical element that was discovered for the first time in 1791. The person who discovered this element was born on what is now known as a major US holiday - what holiday is this?",
+      "gold_answer": "Christmas",
+      "raptor_answer": "The question contains an error because the Basibasy mine is abundant in titanium, which was not discovered in 1791. Titanium was actually discovered by William Gregor in 1791. However, the specific US holiday mentioned (December 25th) is Christmas Day. Therefore, if we are to answer based on the information provided and the context given, the holiday referred to would be Christmas Day, as it is a major US holiday and the birth date of William Gregor (the discoverer of titanium) happens to fall on this day according to the question's premise.\n\nHowever, it should be noted that there is no historical evidence supporting the claim about the discovery date or the birthdate of William Gregor.",
+      "error": "",
+      "status": "Answered, likely unsupported/incorrect",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The question contains an error because the Basibasy mine is abundant in titanium, which was not discovered in 1791. Titanium was actually discovered by William Gregor in 1791. However, the specific US holiday mentioned (December 25th) is Christmas Day. Therefore, if we are to answer based on the information provided and the context given, the holiday referred to would be Christmas Day, as it is a major US holiday and the birth date of William Gregor (the discoverer of titanium) happens to fall on this day according to the question's premise.\n\nHowever, it should be noted that there is no historical evidence supporting the claim about the discovery date or the birthdate of William Gregor.",
+      "gold_string_found_in_answer": true
+    },
+    {
+      "row": 14,
+      "question": "One of Barbara Kingsolver's best known novels is about an American missionary family which moves to Africa. At the time, the country they move to was a Belgian colony. Which year did it become independent?",
+      "gold_answer": "1960",
+      "raptor_answer": "The context states that The Poisonwood Bible is \"the tale of a missionary family in the Congo.\" Given historical facts, the Congo gained independence from Belgium in 1960. Therefore, the year the country Barbara Kingsolver's novel describes became independent was 1960.",
+      "error": "",
+      "status": "Answered, likely unsupported/incorrect",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context states that The Poisonwood Bible is \"the tale of a missionary family in the Congo.\" Given historical facts, the Congo gained independence from Belgium in 1960. Therefore, the year the country Barbara Kingsolver's novel describes became independent was 1960.",
+      "gold_string_found_in_answer": true
+    },
+    {
+      "row": 15,
+      "question": "Which football player got 15 or more assists in La Liga during the 2010-2011 season and also played for Arsenal at one point in his career?",
+      "gold_answer": "This was Mesut Ozil.",
+      "raptor_answer": "The provided context does not contain enough information to answer the question about a football player who got 15 or more assists in La Liga during the 2010-2011 season and also played for Arsenal. The context focuses on the overall performance of teams like Barcelona and Real Madrid, but it does not provide individual player statistics or their career histories outside of La Liga.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain enough information to answer the question about a football player who got 15 or more assists in La Liga during the 2010-2011 season and also played for Arsenal. The context focuses on the overall performance of teams like Barcelona and Real Madrid, but it does not provide individual player statistics or their career histories outside of La Liga.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 16,
+      "question": "In Slovakia there is a well known Film Festival called the Bratistlava International Film Festival. What city/ town was the film editor for the Grand Prix winner of 2003 born in?",
+      "gold_answer": "Roudnice nad Labem",
+      "raptor_answer": "The provided context does not contain information about the birthplace of the film editor for the Grand Prix winner of 2003 or any other specific details about individuals involved in the festival beyond its general structure and programming. Therefore, I cannot answer the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain information about the birthplace of the film editor for the Grand Prix winner of 2003 or any other specific details about individuals involved in the festival beyond its general structure and programming. Therefore, I cannot answer the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 17,
+      "question": "On March 7th, 2012, the director James Cameron explored a very deep underseas trench.  As of August 3, 2024, how many times would the tallest building in San Francisco fit end to end from the bottom of the New Britain Trench to the surface of the ocean? The answer should be a rounded-off whole number.   ",
+      "gold_answer": "28",
+      "raptor_answer": "The context provided does not contain enough information to determine the depth of the New Britain Trench or the height of the tallest building in San Francisco, thus making it impossible to calculate how many times the tallest building would fit end to end from the bottom of the New Britain Trench to the surface of the ocean.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain enough information to determine the depth of the New Britain Trench or the height of the tallest building in San Francisco, thus making it impossible to calculate how many times the tallest building would fit end to end from the bottom of the New Britain Trench to the surface of the ocean.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 18,
+      "question": "In August of 2024, what is the first name of the mayor of the U.S. state capital city who attended the same university as at least one U.S. president and whose city is home to an outgoing or former full member of the Big 12 Conference",
+      "gold_answer": "Leirion",
+      "raptor_answer": "The provided context does not contain enough information to determine the first name of the mayor described in the question. The context mentions universities that were part of the Big 12 but does not provide details about their locations, nor does it include any information about mayors or U.S. state capital cities.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain enough information to determine the first name of the mayor described in the question. The context mentions universities that were part of the Big 12 but does not provide details about their locations, nor does it include any information about mayors or U.S. state capital cities.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 19,
+      "question": "How many years after the founding of the 50th most populous US city, based on 2023 estimate population data, did Frank Fox receive UK Patent (1344259)?",
+      "gold_answer": "98 Years (Arlington, TX & Rubik's Cube)",
+      "raptor_answer": "The provided context does not contain any information about the founding year of the 50th most populous U.S. city in 2023 or when Frank Fox received UK Patent 1344259. Therefore, I cannot determine how many years after the founding of the 50th most populous US city based on 2023 estimate population data that Frank Fox received UK Patent (1344259).",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain any information about the founding year of the 50th most populous U.S. city in 2023 or when Frank Fox received UK Patent 1344259. Therefore, I cannot determine how many years after the founding of the 50th most populous US city based on 2023 estimate population data that Frank Fox received UK Patent (1344259).",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 20,
+      "question": "As of August 4, 2024, in what state was the first secretary of the latest United States federal executive department born?",
+      "gold_answer": "Pennsylvania",
+      "raptor_answer": "The provided context does not contain specific information about the birthplace or the current status of any individuals, particularly focusing on the first secretary of the latest United States federal executive department. Therefore, I cannot answer the question based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain specific information about the birthplace or the current status of any individuals, particularly focusing on the first secretary of the latest United States federal executive department. Therefore, I cannot answer the question based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 21,
+      "question": "As of August 1 2024, what is the most recently described genus of Colosteidae?",
+      "gold_answer": "Deltaherpeton, first described in 2010",
+      "raptor_answer": "The provided context does not contain any information about a specific genus of Colosteidae that was described as of August 1, 2024. Therefore, I cannot answer the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain any information about a specific genus of Colosteidae that was described as of August 1, 2024. Therefore, I cannot answer the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 22,
+      "question": "Małgorzata Rożniecka is a model who won the title of Miss International. What is the difference in title years from when she won and the pageant winner who was murdered by her stalker?",
+      "gold_answer": "10 years",
+      "raptor_answer": "",
+      "error": "all_trees_failed",
+      "status": "Pipeline error",
+      "per_article_answer_count": 0,
+      "logged_context_for_final_synthesis": "",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 23,
+      "question": "According to the 1990 United States census, what was the total population of the cities in Oklahoma that had at least 100,000 residents according to the 2020 United States census?",
+      "gold_answer": "950135",
+      "raptor_answer": "The provided context does not contain specific population data for any cities in Oklahoma from either the 1990 or 2020 censuses. Therefore, I cannot answer the question with the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain specific population data for any cities in Oklahoma from either the 1990 or 2020 censuses. Therefore, I cannot answer the question with the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 24,
+      "question": "What was the political party of the person who advocated for the type of government used in Chikhali, Latur district to become the foundation of India's political system?",
+      "gold_answer": "Indian National Congress",
+      "raptor_answer": "The context provided does not contain any information about a specific person or political party that advocated for a particular type of government in Chikhali. Therefore, it is not possible to answer the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about a specific person or political party that advocated for a particular type of government in Chikhali. Therefore, it is not possible to answer the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 25,
+      "question": "Giorgio Rognoni was an Italian professional footballer who played as a midfielder. 10 years after his death who was the midfielder who played in Milan that was born in Besana in Brianza,?",
+      "gold_answer": "Demetrio Albertini",
+      "raptor_answer": "The context provided does not contain enough information to answer the question about a midfielder who played in Milan and was born in Besana in Brianza 10 years after Giorgio Rognoni's death. The context only gives details about Giorgio Rognoni himself and does not provide any information about other players or events that occurred after his death.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain enough information to answer the question about a midfielder who played in Milan and was born in Besana in Brianza 10 years after Giorgio Rognoni's death. The context only gives details about Giorgio Rognoni himself and does not provide any information about other players or events that occurred after his death.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 26,
+      "question": "What was the age difference between Mike Tyson and Tyson Fury on the respective days on which they lost their first ever fights? Represent the figure in years only.",
+      "gold_answer": "12 years.",
+      "raptor_answer": "The context provided does not contain any information about when Mike Tyson or Tyson Fury lost their first-ever fights, nor does it provide birth dates for either boxer. Therefore, I cannot determine the age difference between them based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about when Mike Tyson or Tyson Fury lost their first-ever fights, nor does it provide birth dates for either boxer. Therefore, I cannot determine the age difference between them based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 27,
+      "question": "Using the Pruett rule, out of all of the blue moons that occurred between the beginning of World War I and the end of World War II, how many of them occurred on the 31st of the month?",
+      "gold_answer": "9",
+      "raptor_answer": "Based on the information provided in the context, there is no specific data about which days of the month calendrical blue moons fell on during the period from the beginning of World War I to the end of World War II. Therefore, it's not possible to determine how many occurred on the 31st of the month using the Pruett rule or any other information given in the context.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "Based on the information provided in the context, there is no specific data about which days of the month calendrical blue moons fell on during the period from the beginning of World War I to the end of World War II. Therefore, it's not possible to determine how many occurred on the 31st of the month using the Pruett rule or any other information given in the context.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 28,
+      "question": "What number would Tommy Lawton have worn playing for Chelsea FC?",
+      "gold_answer": "9",
+      "raptor_answer": "The provided context does not contain any information about the shirt number Tommy Lawton wore while playing for Chelsea FC. Therefore, I cannot determine the number based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain any information about the shirt number Tommy Lawton wore while playing for Chelsea FC. Therefore, I cannot determine the number based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 29,
+      "question": "If you subtract the year that William McCrary \"Billy\" Ray II was born from the year Obama was first sworn in as President to the United States and multiply it by the number of administrative regions in France as of January 1, 2024, what number would you get?",
+      "gold_answer": "828",
+      "raptor_answer": "The context provided does not contain information about when Barack Obama was first sworn in as President or the number of administrative regions in France as of January 1, 2024. Therefore, I cannot provide a numerical answer to this question based on the given information alone.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about when Barack Obama was first sworn in as President or the number of administrative regions in France as of January 1, 2024. Therefore, I cannot provide a numerical answer to this question based on the given information alone.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 30,
+      "question": "If Princess Diana had been born three years earlier, who would have been Prime Minister when she was ten? ",
+      "gold_answer": "Harold Wilson",
+      "raptor_answer": "The context provided does not contain information about the Prime Ministers during different time periods. Therefore, I cannot determine which Prime Minister would have been in office if Diana had been born three years earlier.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the Prime Ministers during different time periods. Therefore, I cannot determine which Prime Minister would have been in office if Diana had been born three years earlier.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 31,
+      "question": "As of August 1, 2024, what is the population of the writer of the \"Culdcept Saga\"'s birthplace? Write the answer to the nearest million, in characters.",
+      "gold_answer": "Two million.",
+      "raptor_answer": "The provided context does not contain any information about the writer or the population of their birthplace. Therefore, I cannot provide an answer based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain any information about the writer or the population of their birthplace. Therefore, I cannot provide an answer based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 32,
+      "question": "What is the middle name of the U.S. president who died on the same day of the year as Virginia Woolf?",
+      "gold_answer": "David",
+      "raptor_answer": "The context provided does not contain any information about a U.S. president or the date of death for any president, so I cannot answer this question based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about a U.S. president or the date of death for any president, so I cannot answer this question based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 33,
+      "question": "As of 2010, if you added the number of times Brazil had won the World Cup to the amount of times the Chicago Bulls had won the NBA Championship and multiplied this number by the amount of times the Dallas Cowboys had won the Super Bowl, what number are you left with?",
+      "gold_answer": "55",
+      "raptor_answer": "The context provided does not contain information about the NBA Championships or the Super Bowl victories. Therefore, I cannot determine the answer to the question using only the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the NBA Championships or the Super Bowl victories. Therefore, I cannot determine the answer to the question using only the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 34,
+      "question": "How old would the founder of the publishing company of the magazine that serialized the manga series Raw Hero have been the year the magazine ended publication?",
+      "gold_answer": "145",
+      "raptor_answer": "The context provided does not contain information about the founder of the publishing company or when the magazine ended publication. Therefore, it is not possible to determine how old the founder would have been in 2020 based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the founder of the publishing company or when the magazine ended publication. Therefore, it is not possible to determine how old the founder would have been in 2020 based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 35,
+      "question": "The oldest extant football team in Italy plays in a stadium.   The stadium is named after a person.   Who was the emperor of China when that person was 5 years old?",
+      "gold_answer": "Guangxu",
+      "raptor_answer": "The provided context does not contain any information about an Italian football club, its stadium, or historical emperors of China. Therefore, I cannot answer this question based on the given context alone.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain any information about an Italian football club, its stadium, or historical emperors of China. Therefore, I cannot answer this question based on the given context alone.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 36,
+      "question": "Of the four main characters on Seinfeld, which actor is the oldest?",
+      "gold_answer": "Michael Richards",
+      "raptor_answer": "The context does not provide specific ages for the actors, so it cannot be determined which actor is the oldest based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context does not provide specific ages for the actors, so it cannot be determined which actor is the oldest based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 37,
+      "question": "How old was Harvard University, when the person whom the longest river in British Columbia is named after, was born?  The river in question only flows within the confines of British Columbia and does not enter any other province or territory.  ",
+      "gold_answer": "140 years old.",
+      "raptor_answer": "The context provided does not contain information about the age of Harvard University relative to the birth year of a person associated with the longest river in British Columbia. Therefore, I cannot determine the answer to this question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the age of Harvard University relative to the birth year of a person associated with the longest river in British Columbia. Therefore, I cannot determine the answer to this question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 38,
+      "question": "On the same day that the The Mercedes-Benz W222 arrived at dealerships, a star of the sit-com Modern Family was wed. Who did the star marry?",
+      "gold_answer": "Justin Mikita",
+      "raptor_answer": "The context provided does not contain any information about a celebrity from the show Modern Family getting married on the same day as the release of the Mercedes-Benz W222. Therefore, I cannot answer this question based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about a celebrity from the show Modern Family getting married on the same day as the release of the Mercedes-Benz W222. Therefore, I cannot answer this question based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 39,
+      "question": "Which species from the genus mulona are both found in the same country?",
+      "gold_answer": "Mulona barnesi and mulona schausi",
+      "raptor_answer": "The provided context does not contain information about specific species within the genus Mulona or their distribution. Therefore, I cannot determine which species from the genus Mulona are both found in the same country based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain information about specific species within the genus Mulona or their distribution. Therefore, I cannot determine which species from the genus Mulona are both found in the same country based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 40,
+      "question": "As of July 1, 2024, if I wanted to give my daughter the middle name of the American woman who is the most decorated female in the history of American gymnastics as her first name and the full first name of the American woman who holds the world record in the 800-meter freestyle as her middle name, what would I name my daughter? ",
+      "gold_answer": "Arianne Kathleen",
+      "raptor_answer": "The context provided does not contain information about the most decorated female in American gymnastics or the holder of the world record in the 800-meter freestyle. Therefore, it is not possible to provide the requested names based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the most decorated female in American gymnastics or the holder of the world record in the 800-meter freestyle. Therefore, it is not possible to provide the requested names based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 41,
+      "question": "I am thinking of a Ancient Roman City.  The city was destroyed by volcanic eruption.  The eruption occurred in the year 79 AD.  The volcano was a stratovolcano.    Where was the session held where it was decided that the city would be named a UNESCO world heritage site?",
+      "gold_answer": "Naples",
+      "raptor_answer": "The context provided does not contain information about where the session was held to decide on naming the city a UNESCO World Heritage Site. Therefore, based solely on the given information, I cannot answer this question accurately.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about where the session was held to decide on naming the city a UNESCO World Heritage Site. Therefore, based solely on the given information, I cannot answer this question accurately.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 42,
+      "question": "What Formula One car was driven in 1994 by the nephew of a racing driver from Italy who drove a Ferrari 312T and shares a last name with a common cocktail drink?",
+      "gold_answer": "Minardi M194",
+      "raptor_answer": "The question contains elements that are not supported by the provided context. The context mentions Michele Alboreto, who is indeed a former Grand Prix winner but does not provide information about him being the nephew of an Italian racing driver who drove a Ferrari 312T or sharing a last name with a common cocktail drink. Therefore, based solely on the given context, it's not possible to answer this question accurately.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The question contains elements that are not supported by the provided context. The context mentions Michele Alboreto, who is indeed a former Grand Prix winner but does not provide information about him being the nephew of an Italian racing driver who drove a Ferrari 312T or sharing a last name with a common cocktail drink. Therefore, based solely on the given context, it's not possible to answer this question accurately.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 43,
+      "question": "As of August 1, 2024, who is the president of the team that inspired the original name of the Washington Commanders?",
+      "gold_answer": "Derek Schiller",
+      "raptor_answer": "The context provided does not contain information about the current president of the Washington Commanders. Therefore, I cannot answer the question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain information about the current president of the Washington Commanders. Therefore, I cannot answer the question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 44,
+      "question": "As of 2023, how many more employees does the company alphabetically first by ticker symbol in the S&P500 have than the company alphabetically 2nd to last by ticker symbol in the S&P500?",
+      "gold_answer": "8,350",
+      "raptor_answer": "",
+      "error": "all_trees_failed",
+      "status": "Pipeline error",
+      "per_article_answer_count": 0,
+      "logged_context_for_final_synthesis": "",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 45,
+      "question": "I am moving to the G40 postcode area - what train stations are nearby, as of 2024?",
+      "gold_answer": "Bridgeton Railway Station and Dalmarnock Railway Station.",
+      "raptor_answer": "The provided context does not contain information about train stations near the G40 postcode area. The context only describes postcode areas used by Royal Mail and does not include details about geographical locations or transportation infrastructure. Therefore, I cannot answer the question regarding nearby train stations based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The provided context does not contain information about train stations near the G40 postcode area. The context only describes postcode areas used by Royal Mail and does not include details about geographical locations or transportation infrastructure. Therefore, I cannot answer the question regarding nearby train stations based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 46,
+      "question": "How old was Stephen Baldwin when Hailey and Justin got married?",
+      "gold_answer": "52",
+      "raptor_answer": "The context provided does not contain any information about Stephen Baldwin or his age at the time of Hailey and Justin's marriage. Therefore, I cannot answer this question based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain any information about Stephen Baldwin or his age at the time of Hailey and Justin's marriage. Therefore, I cannot answer this question based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 47,
+      "question": "As of August 1, 2024, what is the largest city of the 9th largest country by land area in Europe?",
+      "gold_answer": "The largest city of the 9th largest country in Europe is Warsaw.",
+      "raptor_answer": "The context provided does not contain specific information about the ranking of countries by land area or details about their largest cities. Therefore, I cannot determine the largest city of the 9th largest country by land area in Europe based on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain specific information about the ranking of countries by land area or details about their largest cities. Therefore, I cannot determine the largest city of the 9th largest country by land area in Europe based on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 48,
+      "question": "What was the running time of the first cartoon in the series that inspired the name of the Looney Tunes franchise?",
+      "gold_answer": "5 minutes and 31 seconds",
+      "raptor_answer": "The context provided does not contain specific information about the running time of the first cartoon in the series that inspired the name of the Looney Tunes franchise. Therefore, I cannot provide a precise answer based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain specific information about the running time of the first cartoon in the series that inspired the name of the Looney Tunes franchise. Therefore, I cannot provide a precise answer based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 49,
+      "question": "The state, whose motto was adopted March 26, 1928, has 0.94% of the population in 2024 speaking a language that is native to which country?",
+      "gold_answer": "Philippines",
+      "raptor_answer": "The context provided does not contain specific information about a state adopting its motto on March 26, 1928, or details about the languages spoken in 2024 and their origin. Therefore, I cannot answer this question based solely on the given information.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain specific information about a state adopting its motto on March 26, 1928, or details about the languages spoken in 2024 and their origin. Therefore, I cannot answer this question based solely on the given information.",
+      "gold_string_found_in_answer": false
+    },
+    {
+      "row": 50,
+      "question": "As of 2024, at the time of his birth, what was the middle name of the U.S. president who won Alaska, graduated from Yale University, and had a son named Michael?",
+      "gold_answer": "Lynch",
+      "raptor_answer": "The context provided does not contain enough information to determine the middle name of the U.S. president who won Alaska, graduated from Yale University, and had a son named Michael. The given context only mentions Donald Trump's victory in 2024 but does not provide details about his middle name or personal life specifics such as having a son named Michael or graduating from Yale University.",
+      "error": "",
+      "status": "Insufficient retrieved context",
+      "per_article_answer_count": 1,
+      "logged_context_for_final_synthesis": "The context provided does not contain enough information to determine the middle name of the U.S. president who won Alaska, graduated from Yale University, and had a son named Michael. The given context only mentions Donald Trump's victory in 2024 but does not provide details about his middle name or personal life specifics such as having a son named Michael or graduating from Yale University.",
+      "gold_string_found_in_answer": false
+    }
+  ],
+  "tree_summary": [
+    {
+      "tree_file": "-",
+      "file_size_bytes": 14521,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "0",
+      "file_size_bytes": 57097,
+      "num_nodes": 4,
+      "num_layers": 0,
+      "leaf_nodes": 4,
+      "root_nodes": 4
+    },
+    {
+      "tree_file": "1",
+      "file_size_bytes": 42836,
+      "num_nodes": 3,
+      "num_layers": 0,
+      "leaf_nodes": 3,
+      "root_nodes": 3
+    },
+    {
+      "tree_file": "2",
+      "file_size_bytes": 14326,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "3",
+      "file_size_bytes": 14319,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "4",
+      "file_size_bytes": 14297,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "5",
+      "file_size_bytes": 14280,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "6",
+      "file_size_bytes": 14196,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "7",
+      "file_size_bytes": 14512,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "8",
+      "file_size_bytes": 14140,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "9",
+      "file_size_bytes": 14140,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "_",
+      "file_size_bytes": 42788,
+      "num_nodes": 3,
+      "num_layers": 0,
+      "leaf_nodes": 3,
+      "root_nodes": 3
+    },
+    {
+      "tree_file": "a",
+      "file_size_bytes": 28647,
+      "num_nodes": 2,
+      "num_layers": 0,
+      "leaf_nodes": 2,
+      "root_nodes": 2
+    },
+    {
+      "tree_file": "B",
+      "file_size_bytes": 14460,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "C",
+      "file_size_bytes": 14304,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "d",
+      "file_size_bytes": 14305,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "e",
+      "file_size_bytes": 14514,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "f",
+      "file_size_bytes": 14354,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "g",
+      "file_size_bytes": 28610,
+      "num_nodes": 2,
+      "num_layers": 0,
+      "leaf_nodes": 2,
+      "root_nodes": 2
+    },
+    {
+      "tree_file": "h",
+      "file_size_bytes": 14376,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "i",
+      "file_size_bytes": 14335,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "J",
+      "file_size_bytes": 14492,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "k",
+      "file_size_bytes": 14370,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "l",
+      "file_size_bytes": 14307,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "m",
+      "file_size_bytes": 14309,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "n",
+      "file_size_bytes": 14307,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "o",
+      "file_size_bytes": 14333,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "p",
+      "file_size_bytes": 14308,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "q",
+      "file_size_bytes": 14349,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "r",
+      "file_size_bytes": 14447,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "s",
+      "file_size_bytes": 14318,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "t",
+      "file_size_bytes": 42541,
+      "num_nodes": 3,
+      "num_layers": 0,
+      "leaf_nodes": 3,
+      "root_nodes": 3
+    },
+    {
+      "tree_file": "U",
+      "file_size_bytes": 14341,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "v",
+      "file_size_bytes": 14312,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "w",
+      "file_size_bytes": 14307,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "x",
+      "file_size_bytes": 14311,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "y",
+      "file_size_bytes": 28493,
+      "num_nodes": 2,
+      "num_layers": 0,
+      "leaf_nodes": 2,
+      "root_nodes": 2
+    },
+    {
+      "tree_file": "Z",
+      "file_size_bytes": 14466,
+      "num_nodes": 1,
+      "num_layers": 0,
+      "leaf_nodes": 1,
+      "root_nodes": 1
+    },
+    {
+      "tree_file": "é",
+      "file_size_bytes": 28706,
+      "num_nodes": 2,
+      "num_layers": 0,
+      "leaf_nodes": 2,
+      "root_nodes": 2
+    },
+    {
+      "tree_file": "ï",
+      "file_size_bytes": 70972,
+      "num_nodes": 5,
+      "num_layers": 0,
+      "leaf_nodes": 5,
+      "root_nodes": 5
+    },
+    {
+      "tree_file": "Ö",
+      "file_size_bytes": 42485,
+      "num_nodes": 3,
+      "num_layers": 0,
+      "leaf_nodes": 3,
+      "root_nodes": 3
+    }
+  ],
+  "tree_nodes": [
+    {
+      "tree_file": "-",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 437,
+      "text": "The symbol -, known in Unicode as hyphen-minus, is the form of hyphen most commonly used in digital documents  On most keyboards, it is the only character that resembles a minus sign or a dash, so it is also used for these  The name hyphen-minus derives from the original ASCII standard, where it was called hyphen (minus)  The character is referred to as a hyphen, a minus sign, or a dash according to the context where it is being used",
+      "text_preview": "The symbol -, known in Unicode as hyphen-minus, is the form of hyphen most commonly used in digital documents  On most keyboards, it is the only character that resembles a minus sign or a dash, so it is also used for these  The name hyphen-minus derives from the original ASCII standard, where it was called hyphen (minus)  The character is referred to as a hyphen, a minus sign, or a dash according to the context where it is being used"
+    },
+    {
+      "tree_file": "0",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 416,
+      "text": "0 (zero, ) is a number representing an empty quantity  Adding (or subtracting) 0 to any number leaves that number unchanged; in mathematical terminology, 0 is the additive identity of the integers, rational numbers, real numbers, and complex numbers, as well as other algebraic structures  Multiplying any number by 0 results in 0, and consequently dividing by 0 is generally considered to be undefined in arithmetic",
+      "text_preview": "0 (zero, ) is a number representing an empty quantity  Adding (or subtracting) 0 to any number leaves that number unchanged; in mathematical terminology, 0 is the additive identity of the integers, rational numbers, real numbers, and complex numbers, as well as other algebraic structures  Multiplying any number by 0 results in 0, and consequently dividing by 0 is generally considered to be undefined in arithmetic"
+    },
+    {
+      "tree_file": "0",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 366,
+      "text": "As a numerical digit, 0 plays a crucial role in decimal notation: it indicates that the power of ten corresponding to the place containing a 0 does not contribute to the total  For example, \"205\" in decimal means two hundreds, no tens, and five ones  The same principle applies in place-value notations that uses a base other than ten, such as binary and hexadecimal",
+      "text_preview": "As a numerical digit, 0 plays a crucial role in decimal notation: it indicates that the power of ten corresponding to the place containing a 0 does not contribute to the total  For example, \"205\" in decimal means two hundreds, no tens, and five ones  The same principle applies in place-value notations that uses a base other than ten, such as binary and hexadecimal"
+    },
+    {
+      "tree_file": "0",
+      "node_index": 2,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 469,
+      "text": " The modern use of 0 in this manner derives from Indian mathematics that was transmitted to Europe via medieval Islamic mathematicians and popularized by Fibonacci  It was independently used by the Maya Common names for the number 0 in English include zero, nought, naught (), and nil  In contexts where at least one adjacent digit distinguishes it from the letter O, the number is sometimes pronounced as oh or o ()  Informal or slang terms for 0 include zilch and zip",
+      "text_preview": " The modern use of 0 in this manner derives from Indian mathematics that was transmitted to Europe via medieval Islamic mathematicians and popularized by Fibonacci  It was independently used by the Maya Common names for the number 0 in English include zero, nought, naught (), and nil  In contexts where at least one adjacent digit distinguishes it from the letter O, the number is sometimes pronounced as oh or o ()  Informal or slang terms for 0 include zilch and zip"
+    },
+    {
+      "tree_file": "0",
+      "node_index": 3,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 62,
+      "text": " Historically, ought, aught (), and cipher have also been used",
+      "text_preview": " Historically, ought, aught (), and cipher have also been used"
+    },
+    {
+      "tree_file": "1",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 392,
+      "text": "1 (one, unit, unity) is a number, numeral, and grapheme  It is the first and smallest positive integer of the infinite sequence of natural numbers  This fundamental property has led to its unique uses in other fields, ranging from science to sports, where it commonly denotes the first, leading, or top thing in a group  1 is the unit of counting or measurement, and represents a single thing",
+      "text_preview": "1 (one, unit, unity) is a number, numeral, and grapheme  It is the first and smallest positive integer of the infinite sequence of natural numbers  This fundamental property has led to its unique uses in other fields, ranging from science to sports, where it commonly denotes the first, leading, or top thing in a group  1 is the unit of counting or measurement, and represents a single thing"
+    },
+    {
+      "tree_file": "1",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 464,
+      "text": " The representation of 1 evolved from ancient Sumerian and Babylonian symbols to the modern Arabic numeral  Linguistically, in English, \"one\" is a determiner for singular nouns and a gender-neutral pronoun In mathematics, 1 is the multiplicative identity, meaning that any number multiplied by 1 equals the same number  1 is by convention not considered a prime number  In digital technology, 1 represents the \"on\" state in binary code, the foundation of computing",
+      "text_preview": " The representation of 1 evolved from ancient Sumerian and Babylonian symbols to the modern Arabic numeral  Linguistically, in English, \"one\" is a determiner for singular nouns and a gender-neutral pronoun In mathematics, 1 is the multiplicative identity, meaning that any number multiplied by 1 equals the same number  1 is by convention not considered a prime number  In digital technology, 1 represents the \"on\" state in binary code, the foundation of computing"
+    },
+    {
+      "tree_file": "1",
+      "node_index": 2,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 96,
+      "text": " Philosophically, 1 symbolizes the ultimate reality or source of existence in various traditions",
+      "text_preview": " Philosophically, 1 symbolizes the ultimate reality or source of existence in various traditions"
+    },
+    {
+      "tree_file": "2",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 245,
+      "text": "2 (two) is a number, numeral and digit  It is the natural number following 1 and preceding 3  It is the smallest and the only even prime number Because it forms the basis of a duality, it has religious and spiritual significance in many cultures",
+      "text_preview": "2 (two) is a number, numeral and digit  It is the natural number following 1 and preceding 3  It is the smallest and the only even prime number Because it forms the basis of a duality, it has religious and spiritual significance in many cultures"
+    },
+    {
+      "tree_file": "3",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 238,
+      "text": "3 (three) is a number, numeral and digit  It is the natural number following 2 and preceding 4, and is the smallest odd prime number and the only prime preceding a square number It has religious and cultural significance in many societies",
+      "text_preview": "3 (three) is a number, numeral and digit  It is the natural number following 2 and preceding 4, and is the smallest odd prime number and the only prime preceding a square number It has religious and cultural significance in many societies"
+    },
+    {
+      "tree_file": "4",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 216,
+      "text": "4 (four) is a number, numeral and digit  It is the natural number following 3 and preceding 5  It is a square number, the smallest semiprime and composite number, and is considered unlucky in many East Asian cultures",
+      "text_preview": "4 (four) is a number, numeral and digit  It is the natural number following 3 and preceding 5  It is a square number, the smallest semiprime and composite number, and is considered unlucky in many East Asian cultures"
+    },
+    {
+      "tree_file": "5",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 199,
+      "text": "5 (five) is a number, numeral and digit  It is the natural number, and cardinal number, following 4 and preceding 6, and is a prime number Humans, and many other animals, have 5 digits on their limbs",
+      "text_preview": "5 (five) is a number, numeral and digit  It is the natural number, and cardinal number, following 4 and preceding 6, and is a prime number Humans, and many other animals, have 5 digits on their limbs"
+    },
+    {
+      "tree_file": "6",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 115,
+      "text": "6 (six) is the natural number following 5 and preceding 7  It is a composite number and the smallest perfect number",
+      "text_preview": "6 (six) is the natural number following 5 and preceding 7  It is a composite number and the smallest perfect number"
+    },
+    {
+      "tree_file": "7",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 428,
+      "text": "7 (seven) is the natural number following 6 and preceding 8  It is the only prime number preceding a cube As an early prime number in the series of positive integers, the number seven has symbolic associations in religion, mythology, superstition and philosophy  The seven classical planets resulted in seven being the number of days in a week  7 is often considered lucky in Western culture and is often seen as highly symbolic",
+      "text_preview": "7 (seven) is the natural number following 6 and preceding 8  It is the only prime number preceding a cube As an early prime number in the series of positive integers, the number seven has symbolic associations in religion, mythology, superstition and philosophy  The seven classical planets resulted in seven being the number of days in a week  7 is often considered lucky in Western culture and is often seen as highly symbolic"
+    },
+    {
+      "tree_file": "8",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 59,
+      "text": "8 (eight) is the natural number following 7 and preceding 9",
+      "text_preview": "8 (eight) is the natural number following 7 and preceding 9"
+    },
+    {
+      "tree_file": "9",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 59,
+      "text": "9 (nine) is the natural number following 8 and preceding 10",
+      "text_preview": "9 (nine) is the natural number following 8 and preceding 10"
+    },
+    {
+      "tree_file": "_",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 301,
+      "text": "The apostrophe (’, ') is a punctuation mark, and sometimes a diacritical mark, in languages that use the Latin alphabet and some other alphabets  In English, the apostrophe is used for two basic purposes: The marking of the omission of one or more letters, e g , the contraction of \"do not\" to \"don't\"",
+      "text_preview": "The apostrophe (’, ') is a punctuation mark, and sometimes a diacritical mark, in languages that use the Latin alphabet and some other alphabets  In English, the apostrophe is used for two basic purposes: The marking of the omission of one or more letters, e g , the contraction of \"do not\" to \"don't\""
+    },
+    {
+      "tree_file": "_",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 411,
+      "text": "The marking of possessive case of nouns (as in \"the eagle's feathers\", \"in one month's time\", \"the twins' coats\") It is also used in a few exceptional cases for the marking of plurals, e g , \"p's and q's\" or Oakland A's  The same mark is used as a single quotation mark  It is also substituted informally for other marks –  for example instead of the prime symbol to indicate the units of foot or minutes of arc",
+      "text_preview": "The marking of possessive case of nouns (as in \"the eagle's feathers\", \"in one month's time\", \"the twins' coats\") It is also used in a few exceptional cases for the marking of plurals, e g , \"p's and q's\" or Oakland A's  The same mark is used as a single quotation mark  It is also substituted informally for other marks –  for example instead of the prime symbol to indicate the units of foot or minutes of arc"
+    },
+    {
+      "tree_file": "_",
+      "node_index": 2,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 162,
+      "text": "The word apostrophe comes from the Greek ἡ ἀπόστροφος [προσῳδία] (hē apóstrophos [prosōidía], '[the accent of] turning away or elision'), through Latin and French",
+      "text_preview": "The word apostrophe comes from the Greek ἡ ἀπόστροφος [προσῳδία] (hē apóstrophos [prosōidía], '[the accent of] turning away or elision'), through Latin and French"
+    },
+    {
+      "tree_file": "a",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 400,
+      "text": "A (minuscule: a) is the first letter and the first vowel letter of the Latin alphabet, used in the modern English alphabet, and others worldwide  Its name in English is a (pronounced as in say), plural aes It is similar in shape to the Ancient Greek letter alpha, from which it derives  The uppercase version consists of the two slanting sides of a triangle, crossed in the middle by a horizontal bar",
+      "text_preview": "A (minuscule: a) is the first letter and the first vowel letter of the Latin alphabet, used in the modern English alphabet, and others worldwide  Its name in English is a (pronounced as in say), plural aes It is similar in shape to the Ancient Greek letter alpha, from which it derives  The uppercase version consists of the two slanting sides of a triangle, crossed in the middle by a horizontal bar"
+    },
+    {
+      "tree_file": "a",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 259,
+      "text": " The lowercase version is often written in one of two forms: the double-storey |a| and single-storey |ɑ|  The latter form is commonly used in handwriting and fonts based on it, especially fonts intended to be read by children, and is also found in italic type",
+      "text_preview": " The lowercase version is often written in one of two forms: the double-storey |a| and single-storey |ɑ|  The latter form is commonly used in handwriting and fonts based on it, especially fonts intended to be read by children, and is also found in italic type"
+    },
+    {
+      "tree_file": "B",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 376,
+      "text": "B (minuscule: b) is the second letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is bee (pronounced  ), plural bees It represents the voiced bilabial stop in many languages, including English  In some other languages, it is used to represent other bilabial consonants",
+      "text_preview": "B (minuscule: b) is the second letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is bee (pronounced  ), plural bees It represents the voiced bilabial stop in many languages, including English  In some other languages, it is used to represent other bilabial consonants"
+    },
+    {
+      "tree_file": "C",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 223,
+      "text": "C (minuscule: c) is the third letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is cee (pronounced  ), plural cees",
+      "text_preview": "C (minuscule: c) is the third letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is cee (pronounced  ), plural cees"
+    },
+    {
+      "tree_file": "d",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 224,
+      "text": "D (minuscule: d) is the fourth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is dee (pronounced  ), plural dees",
+      "text_preview": "D (minuscule: d) is the fourth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is dee (pronounced  ), plural dees"
+    },
+    {
+      "tree_file": "e",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 430,
+      "text": "E (minuscule: e) is the fifth letter and the second vowel letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is e (pronounced  ); plural es, Es, or E's It is the most commonly used letter in many languages, including Czech, Danish, Dutch, English, French, German, Hungarian, Latin, Latvian, Norwegian, Spanish, and Swedish",
+      "text_preview": "E (minuscule: e) is the fifth letter and the second vowel letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is e (pronounced  ); plural es, Es, or E's It is the most commonly used letter in many languages, including Czech, Danish, Dutch, English, French, German, Hungarian, Latin, Latvian, Norwegian, Spanish, and Swedish"
+    },
+    {
+      "tree_file": "f",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 270,
+      "text": "F (minuscule: f) is the sixth letter of the Latin alphabet and many modern alphabets influenced by it, including the modern English alphabet and the alphabets of all other modern western European languages  Its name in English is ef (pronounced  ), and the plural is efs",
+      "text_preview": "F (minuscule: f) is the sixth letter of the Latin alphabet and many modern alphabets influenced by it, including the modern English alphabet and the alphabets of all other modern western European languages  Its name in English is ef (pronounced  ), and the plural is efs"
+    },
+    {
+      "tree_file": "g",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 367,
+      "text": "G (minuscule: g) is the seventh letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages, and others worldwide  Its name in English is gee (pronounced  ), plural gees The lowercase version can be written in two forms: the single-storey (sometimes \"opentail\") g and the double-storey (sometimes \"looptail\") g",
+      "text_preview": "G (minuscule: g) is the seventh letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages, and others worldwide  Its name in English is gee (pronounced  ), plural gees The lowercase version can be written in two forms: the single-storey (sometimes \"opentail\") g and the double-storey (sometimes \"looptail\") g"
+    },
+    {
+      "tree_file": "g",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 256,
+      "text": " The former is commonly used in handwriting and typefaces based on it, especially in texts intended to be read by children; it is the style used by most sans-serif typefaces, such as Helvetica  The latter form is used by most serif typefaces, such as Times",
+      "text_preview": " The former is commonly used in handwriting and typefaces based on it, especially in texts intended to be read by children; it is the style used by most sans-serif typefaces, such as Helvetica  The latter form is used by most serif typefaces, such as Times"
+    },
+    {
+      "tree_file": "h",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 292,
+      "text": "H (minuscule: h) is the eighth letter of the Latin alphabet, used in the modern English alphabet, including the alphabets of other western European languages and others worldwide  Its name in English is aitch (pronounced  , plural aitches), or regionally haitch (pronounced , plural haitches)",
+      "text_preview": "H (minuscule: h) is the eighth letter of the Latin alphabet, used in the modern English alphabet, including the alphabets of other western European languages and others worldwide  Its name in English is aitch (pronounced  , plural aitches), or regionally haitch (pronounced , plural haitches)"
+    },
+    {
+      "tree_file": "i",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 254,
+      "text": "I (minuscule: i) is the ninth letter and the third vowel letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is i (pronounced  ), plural  i's or is",
+      "text_preview": "I (minuscule: i) is the ninth letter and the third vowel letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is i (pronounced  ), plural  i's or is"
+    },
+    {
+      "tree_file": "J",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 408,
+      "text": "J (minuscule: j) is the tenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its usual name in English is jay (pronounced  ), with a now-uncommon variant jye  When used in the International Phonetic Alphabet for the voiced palatal approximant (the sound of \"y\" in \"yes\") it may be called yod or jod (pronounced  or )",
+      "text_preview": "J (minuscule: j) is the tenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its usual name in English is jay (pronounced  ), with a now-uncommon variant jye  When used in the International Phonetic Alphabet for the voiced palatal approximant (the sound of \"y\" in \"yes\") it may be called yod or jod (pronounced  or )"
+    },
+    {
+      "tree_file": "k",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 286,
+      "text": "K (minuscule: k) is the eleventh letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is kay (pronounced  ), plural kays The letter K usually represents the voiceless velar plosive",
+      "text_preview": "K (minuscule: k) is the eleventh letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is kay (pronounced  ), plural kays The letter K usually represents the voiceless velar plosive"
+    },
+    {
+      "tree_file": "l",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 226,
+      "text": "L (minuscule: l) is the twelfth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is el (pronounced   EL), plural els",
+      "text_preview": "L (minuscule: l) is the twelfth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is el (pronounced   EL), plural els"
+    },
+    {
+      "tree_file": "m",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 228,
+      "text": "M (minuscule: m) is the thirteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of several western European languages and others worldwide  Its name in English is em (pronounced  ), plural ems",
+      "text_preview": "M (minuscule: m) is the thirteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of several western European languages and others worldwide  Its name in English is em (pronounced  ), plural ems"
+    },
+    {
+      "tree_file": "n",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 226,
+      "text": "N (minuscule: n) is the fourteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages, and others worldwide  Its name in English is en (pronounced ), plural ens",
+      "text_preview": "N (minuscule: n) is the fourteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages, and others worldwide  Its name in English is en (pronounced ), plural ens"
+    },
+    {
+      "tree_file": "o",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 252,
+      "text": "O (minuscule: o) is the fifteenth letter and the fourth vowel letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is o (pronounced  ), plural oes",
+      "text_preview": "O (minuscule: o) is the fifteenth letter and the fourth vowel letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is o (pronounced  ), plural oes"
+    },
+    {
+      "tree_file": "p",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 227,
+      "text": "P (minuscule: p) is the sixteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is pee (pronounced  ), plural pees",
+      "text_preview": "P (minuscule: p) is the sixteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is pee (pronounced  ), plural pees"
+    },
+    {
+      "tree_file": "q",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 265,
+      "text": "Q (minuscule: q) is the seventeenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is pronounced  , most commonly spelled cue, but also kew, kue, and que",
+      "text_preview": "Q (minuscule: q) is the seventeenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is pronounced  , most commonly spelled cue, but also kew, kue, and que"
+    },
+    {
+      "tree_file": "r",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 347,
+      "text": "R (minuscule: r) is the eighteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is ar (pronounced  ), plural ars The letter ⟨r⟩ is the eighth most common letter in English and the fourth-most common consonant, after ⟨t⟩, ⟨n⟩, and ⟨s⟩",
+      "text_preview": "R (minuscule: r) is the eighteenth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is ar (pronounced  ), plural ars The letter ⟨r⟩ is the eighth most common letter in English and the fourth-most common consonant, after ⟨t⟩, ⟨n⟩, and ⟨s⟩"
+    },
+    {
+      "tree_file": "s",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 237,
+      "text": "S (minuscule: s) is the nineteenth letter of the Latin alphabet, used in the English alphabet, the alphabets of other western European languages and other latin alphabets worldwide  Its name in English is ess (pronounced  ), plural esses",
+      "text_preview": "S (minuscule: s) is the nineteenth letter of the Latin alphabet, used in the English alphabet, the alphabets of other western European languages and other latin alphabets worldwide  Its name in English is ess (pronounced  ), plural esses"
+    },
+    {
+      "tree_file": "t",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 227,
+      "text": "T (minuscule: t) is the twentieth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is tee (pronounced  ), plural tees",
+      "text_preview": "T (minuscule: t) is the twentieth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is tee (pronounced  ), plural tees"
+    },
+    {
+      "tree_file": "t",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 315,
+      "text": "It is derived from the Semitic Taw 𐤕 of the Phoenician and Paleo-Hebrew script (Aramaic and Hebrew Taw ת/𐡕/, Syriac Taw ܬ, and Arabic ت Tāʼ) via the Greek letter τ (tau)  In English, it is most commonly used to represent the voiceless alveolar plosive, a sound it also denotes in the International Phonetic Alphabet",
+      "text_preview": "It is derived from the Semitic Taw 𐤕 of the Phoenician and Paleo-Hebrew script (Aramaic and Hebrew Taw ת/𐡕/, Syriac Taw ܬ, and Arabic ت Tāʼ) via the Greek letter τ (tau)  In English, it is most commonly used to represent the voiceless alveolar plosive, a sound it also denotes in the International Phonetic Alphabet"
+    },
+    {
+      "tree_file": "t",
+      "node_index": 2,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 106,
+      "text": " It is the most commonly used consonant and the second-most commonly used letter in English-language texts",
+      "text_preview": " It is the most commonly used consonant and the second-most commonly used letter in English-language texts"
+    },
+    {
+      "tree_file": "U",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 257,
+      "text": "U (minuscule: u) is the twenty-first letter and the fifth vowel letter of the Latin alphabet, used in the modern English alphabet and the alphabets of other western European languages and others worldwide  Its name in English is u (pronounced  ), plural ues",
+      "text_preview": "U (minuscule: u) is the twenty-first letter and the fifth vowel letter of the Latin alphabet, used in the modern English alphabet and the alphabets of other western European languages and others worldwide  Its name in English is u (pronounced  ), plural ues"
+    },
+    {
+      "tree_file": "v",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 231,
+      "text": "V (minuscule: v) is the twenty-second letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is vee (pronounced  ), plural vees",
+      "text_preview": "V (minuscule: v) is the twenty-second letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is vee (pronounced  ), plural vees"
+    },
+    {
+      "tree_file": "w",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 226,
+      "text": "W (minuscule: w) is the twenty-third letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is double-u, plural double-ues",
+      "text_preview": "W (minuscule: w) is the twenty-third letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is double-u, plural double-ues"
+    },
+    {
+      "tree_file": "x",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 230,
+      "text": "X (minuscule: x) is the twenty-fourth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is ex (pronounced  ), plural exes",
+      "text_preview": "X (minuscule: x) is the twenty-fourth letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  Its name in English is ex (pronounced  ), plural exes"
+    },
+    {
+      "tree_file": "y",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 359,
+      "text": "Y (minuscule: y) is the twenty-fifth and penultimate letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  According to some authorities, it is the sixth (or seventh if including W) vowel letter of the English alphabet  Its name in English is wye (pronounced  ), plural wyes",
+      "text_preview": "Y (minuscule: y) is the twenty-fifth and penultimate letter of the Latin alphabet, used in the modern English alphabet, the alphabets of other western European languages and others worldwide  According to some authorities, it is the sixth (or seventh if including W) vowel letter of the English alphabet  Its name in English is wye (pronounced  ), plural wyes"
+    },
+    {
+      "tree_file": "y",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 150,
+      "text": "In the English writing system, it mostly represents a vowel and seldom a consonant, and in other orthographies it may represent a vowel or a consonant",
+      "text_preview": "In the English writing system, it mostly represents a vowel and seldom a consonant, and in other orthographies it may represent a vowel or a consonant"
+    },
+    {
+      "tree_file": "Z",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 382,
+      "text": "Z (minuscule: z) is the twenty-sixth and last letter of the Latin alphabet  It is used in the modern English alphabet, in the alphabets of other Western European languages, and in others worldwide  Its usual names in English are zed (), which is most commonly used in British English, and zee ( ), most commonly used in American English, with an occasional archaic variant izzard ()",
+      "text_preview": "Z (minuscule: z) is the twenty-sixth and last letter of the Latin alphabet  It is used in the modern English alphabet, in the alphabets of other Western European languages, and in others worldwide  Its usual names in English are zed (), which is most commonly used in British English, and zee ( ), most commonly used in American English, with an occasional archaic variant izzard ()"
+    },
+    {
+      "tree_file": "é",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 325,
+      "text": "É (minuscule: é), known as E-acute, is a Latin-script character composed of the letter E and an acute accent  In English, it is used for loanwords (such as French résumé), romanization (Japanese Pokémon) (Balinese Dénpasar, Buléléng) or occasionally as a pronunciation aid in poetry, to indicate stress on an unusual syllable",
+      "text_preview": "É (minuscule: é), known as E-acute, is a Latin-script character composed of the letter E and an acute accent  In English, it is used for loanwords (such as French résumé), romanization (Japanese Pokémon) (Balinese Dénpasar, Buléléng) or occasionally as a pronunciation aid in poetry, to indicate stress on an unusual syllable"
+    },
+    {
+      "tree_file": "é",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 384,
+      "text": "Languages may use é to indicate a certain sound (French), stress pattern (Spanish), length (Czech) or tone (Vietnamese, Chinese), as well as to write loanwords or distinguish identical-sounding words (Dutch)  Certain romanization systems such as pinyin (Standard Chinese) also use é for tone  Some languages use the letter only in specific contexts, such as in Indonesian dictionaries",
+      "text_preview": "Languages may use é to indicate a certain sound (French), stress pattern (Spanish), length (Czech) or tone (Vietnamese, Chinese), as well as to write loanwords or distinguish identical-sounding words (Dutch)  Certain romanization systems such as pinyin (Standard Chinese) also use é for tone  Some languages use the letter only in specific contexts, such as in Indonesian dictionaries"
+    },
+    {
+      "tree_file": "ï",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 174,
+      "text": "Ï (minuscule: ï) is a symbol used in various languages written with the Latin alphabet; the Latin letter I with a diacritic of two dots, which may be read as I with diaeresis",
+      "text_preview": "Ï (minuscule: ï) is a symbol used in various languages written with the Latin alphabet; the Latin letter I with a diacritic of two dots, which may be read as I with diaeresis"
+    },
+    {
+      "tree_file": "ï",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 378,
+      "text": "Initially in French and also in Afrikaans, Catalan, Dutch, Galician, Southern Sami, Welsh,  Purépecha,  and rarely English, ⟨ï⟩ is used when ⟨i⟩ follows another vowel and indicates hiatus in the pronunciation of such a word  It indicates that the two vowels are pronounced in separate syllables, rather than together as a diphthong or digraph  For example, French maïs (IPA: [ma",
+      "text_preview": "Initially in French and also in Afrikaans, Catalan, Dutch, Galician, Southern Sami, Welsh,  Purépecha,  and rarely English, ⟨ï⟩ is used when ⟨i⟩ follows another vowel and indicates hiatus in the pronunciation of such a word  It indicates that the two vowels are pronounced in separate syllables, rather than together as a diphthong or digraph  For example, French maïs (IPA: [ma"
+    },
+    {
+      "tree_file": "ï",
+      "node_index": 2,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 100,
+      "text": "is] ; \"maize\"); without the diaeresis, the ⟨i⟩ is part of the digraph ⟨ai⟩: mais (IPA: [mɛ] ; \"but\")",
+      "text_preview": "is] ; \"maize\"); without the diaeresis, the ⟨i⟩ is part of the digraph ⟨ai⟩: mais (IPA: [mɛ] ; \"but\")"
+    },
+    {
+      "tree_file": "ï",
+      "node_index": 3,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 170,
+      "text": " The letter is also used in the same context in Dutch, as in Oekraïne (pronounced [ukraːˈ(j)inə]  *and not [uˈkrɑinə]; \"Ukraine\"), and English naïve ( nah-EEV or  ny-EEV)",
+      "text_preview": " The letter is also used in the same context in Dutch, as in Oekraïne (pronounced [ukraːˈ(j)inə]  *and not [uˈkrɑinə]; \"Ukraine\"), and English naïve ( nah-EEV or  ny-EEV)"
+    },
+    {
+      "tree_file": "ï",
+      "node_index": 4,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 409,
+      "text": "In scholarly writing on Turkic languages, ⟨ï⟩ is sometimes used to write the close back unrounded vowel /ɯ/, which, in the standard modern Turkish alphabet, is written as the dotless i ⟨ı⟩  The back neutral vowel reconstructed in Proto-Mongolic is sometimes written ⟨ï⟩ In the transcription of Amazonian languages, ⟨ï⟩ is used to represent the high central vowel [ɨ] It is also a transliteration of the rune ᛇ",
+      "text_preview": "In scholarly writing on Turkic languages, ⟨ï⟩ is sometimes used to write the close back unrounded vowel /ɯ/, which, in the standard modern Turkish alphabet, is written as the dotless i ⟨ı⟩  The back neutral vowel reconstructed in Proto-Mongolic is sometimes written ⟨ï⟩ In the transcription of Amazonian languages, ⟨ï⟩ is used to represent the high central vowel [ɨ] It is also a transliteration of the rune ᛇ"
+    },
+    {
+      "tree_file": "Ö",
+      "node_index": 0,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 196,
+      "text": "Ö (minuscule: ö) is a character that represents either a letter from several extended Latin alphabets, or the letter \"o\" modified with an umlaut or diaeresis  Ö, or ö, is a variant of the letter O",
+      "text_preview": "Ö (minuscule: ö) is a character that represents either a letter from several extended Latin alphabets, or the letter \"o\" modified with an umlaut or diaeresis  Ö, or ö, is a variant of the letter O"
+    },
+    {
+      "tree_file": "Ö",
+      "node_index": 1,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 239,
+      "text": " In many languages, the letter \"ö\", or the \"o\" modified with an umlaut, is used to denote the close- or open-mid front rounded vowels [ø]  or [œ] ; compare the vowel in \"girl\", which in these languages phonetically could be written: /görl/",
+      "text_preview": " In many languages, the letter \"ö\", or the \"o\" modified with an umlaut, is used to denote the close- or open-mid front rounded vowels [ø]  or [œ] ; compare the vowel in \"girl\", which in these languages phonetically could be written: /görl/"
+    },
+    {
+      "tree_file": "Ö",
+      "node_index": 2,
+      "layer": "",
+      "children_count": 0,
+      "char_count": 164,
+      "text": " In languages without such vowels, the character is known as an \"o with diaeresis\" and denotes a syllable break, wherein its pronunciation remains an unmodified [o]",
+      "text_preview": " In languages without such vowels, the character is known as an \"o with diaeresis\" and denotes a syllable break, wherein its pronunciation remains an unmodified [o]"
+    }
+  ]
+}
