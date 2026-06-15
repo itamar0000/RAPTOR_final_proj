@@ -39,6 +39,14 @@ from tqdm import tqdm
 from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
 from ollama_models import OllamaSummarizer, OllamaQA, OllamaEmbedding
 from groq_models import GroqSummarizer, GroqQA
+from gemini_models import GeminiSummarizer, GeminiQA
+
+# Default LLM model per provider (used when --llm_model is left blank)
+DEFAULT_MODELS = {
+    "gemini": "gemini-2.5-flash",
+    "groq":   "llama-3.3-70b-versatile",
+    "ollama": "qwen2.5:14b-instruct",
+}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -126,21 +134,30 @@ def run(args):
         log.info("Resume mode: skipping first %d already-completed rows", already_done)
 
     # ── Build RAPTOR config ──────────────────────────────────────────────────
-    if args.llm_provider == "groq":
-        api_key = args.groq_api_key or __import__("os").environ.get("GROQ_API_KEY", "")
-        log.info("Using Groq API (model=%s)", args.llm_model)
-        summarizer = GroqSummarizer(api_key=api_key, model=args.llm_model)
-        qa_model   = GroqQA(api_key=api_key, model=args.llm_model)
+    import os
+    model = args.llm_model or DEFAULT_MODELS[args.llm_provider]
+    if args.llm_provider == "gemini":
+        api_key = args.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
+        log.info("Using Gemini API (model=%s)", model)
+        summarizer = GeminiSummarizer(api_key=api_key, model=model)
+        qa_model   = GeminiQA(api_key=api_key, model=model)
+    elif args.llm_provider == "groq":
+        api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY", "")
+        log.info("Using Groq API (model=%s)", model)
+        summarizer = GroqSummarizer(api_key=api_key, model=model)
+        qa_model   = GroqQA(api_key=api_key, model=model)
     else:
-        log.info("Using Ollama (model=%s)", args.llm_model)
-        summarizer = OllamaSummarizer(model=args.llm_model)
-        qa_model   = OllamaQA(model=args.llm_model)
+        log.info("Using Ollama (model=%s)", model)
+        summarizer = OllamaSummarizer(model=model)
+        qa_model   = OllamaQA(model=model)
 
     config = RetrievalAugmentationConfig(
         summarization_model=summarizer,
         qa_model=qa_model,
         embedding_model=OllamaEmbedding(model=args.embed_model),
+        tb_max_tokens=args.tb_max_tokens,
     )
+    log.info("RAPTOR leaf chunk size: tb_max_tokens=%d", args.tb_max_tokens)
     config.retrieval_mode    = args.retrieval_mode
     config.use_reranker      = args.use_reranker
     config.reranker_model    = args.reranker_model
@@ -277,14 +294,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="RAPTOR on QuALITY multiple-choice benchmark"
     )
-    parser.add_argument("--llm_model",      default="llama-3.3-70b-versatile",
-                        help="LLM model name (Groq model id or Ollama model name)")
+    parser.add_argument("--llm_model",      default="",
+                        help="LLM model name (blank = provider default: "
+                             "gemini-2.0-flash / llama-3.3-70b-versatile / qwen2.5:14b-instruct)")
     parser.add_argument("--embed_model",    default="nomic-embed-text",
                         help="Ollama embedding model (always local)")
-    parser.add_argument("--llm_provider",   default="groq", choices=["ollama", "groq"],
-                        help="LLM backend: groq (default) or ollama")
+    parser.add_argument("--llm_provider",   default="gemini", choices=["ollama", "groq", "gemini"],
+                        help="LLM backend: gemini (default), groq, or ollama")
     parser.add_argument("--groq_api_key",   default="",
                         help="Groq API key (or set GROQ_API_KEY env var)")
+    parser.add_argument("--gemini_api_key", default="",
+                        help="Gemini API key (or set GEMINI_API_KEY env var)")
+    parser.add_argument("--tb_max_tokens",  type=int, default=500,
+                        help="RAPTOR leaf chunk size in tokens. Larger = fewer leaf "
+                             "nodes = fewer summary API calls (500 cuts calls ~5x vs 100)")
     parser.add_argument("--max_samples",    type=int, default=100,
                         help="Number of questions to run (0 = full dataset)")
     parser.add_argument("--split",          default="train",

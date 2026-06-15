@@ -42,6 +42,14 @@ from tqdm import tqdm
 from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
 from ollama_models import OllamaSummarizer, OllamaQA, OllamaEmbedding
 from groq_models import GroqSummarizer, GroqQA
+from gemini_models import GeminiSummarizer, GeminiQA
+
+# Default LLM model per provider (used when --llm_model is left blank)
+DEFAULT_MODELS = {
+    "gemini": "gemini-2.5-flash",
+    "groq":   "llama-3.3-70b-versatile",
+    "ollama": "qwen2.5:14b-instruct",
+}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -212,21 +220,33 @@ def run(args):
     log.info(f"Results will be saved to: {results_path}")
 
     # ── Build config with all new retrieval flags ─────────────────────────────
-    if args.llm_provider == "groq":
-        api_key = args.groq_api_key or __import__("os").environ.get("GROQ_API_KEY", "")
-        log.info("Using Groq API (model=%s)", args.llm_model)
-        summarizer = GroqSummarizer(api_key=api_key, model=args.llm_model)
-        qa_model   = GroqQA(api_key=api_key, model=args.llm_model)
+    # Summarization AND QA use the same provider. Gemini's generous free tier
+    # (1M TPM, ~1500 req/day) handles the many summary calls per article that
+    # exhaust Groq's 131K-tokens/day cap. Local Ollama 8B summaries are poor.
+    import os
+    model = args.llm_model or DEFAULT_MODELS[args.llm_provider]
+    if args.llm_provider == "gemini":
+        api_key = args.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
+        log.info("Summarizer + QA: Gemini (%s)", model)
+        summarizer = GeminiSummarizer(api_key=api_key, model=model)
+        qa_model   = GeminiQA(api_key=api_key, model=model)
+    elif args.llm_provider == "groq":
+        api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY", "")
+        log.info("Summarizer + QA: Groq (%s)", model)
+        summarizer = GroqSummarizer(api_key=api_key, model=model)
+        qa_model   = GroqQA(api_key=api_key, model=model)
     else:
-        log.info("Using Ollama (model=%s)", args.llm_model)
-        summarizer = OllamaSummarizer(model=args.llm_model)
-        qa_model   = OllamaQA(model=args.llm_model)
+        log.info("Summarizer + QA: Ollama (%s)", model)
+        summarizer = OllamaSummarizer(model=model)
+        qa_model   = OllamaQA(model=model)
 
     config = RetrievalAugmentationConfig(
         summarization_model=summarizer,
         qa_model=qa_model,
         embedding_model=OllamaEmbedding(model=args.embed_model),
+        tb_max_tokens=args.tb_max_tokens,
     )
+    log.info("RAPTOR leaf chunk size: tb_max_tokens=%d", args.tb_max_tokens)
     # Store retrieval flags as plain attributes — the RAPTOR library doesn't
     # expose these in __init__, but build_unified_tree reads them from config.
     config.retrieval_mode   = args.retrieval_mode
@@ -385,14 +405,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="RAPTOR on FRAMES benchmark with configurable retrieval"
     )
-    parser.add_argument("--llm_model",    default="llama-3.3-70b-versatile",
-                        help="LLM model name (Ollama model or Groq model id)")
+    parser.add_argument("--llm_model",    default="",
+                        help="LLM model name (blank = provider default: "
+                             "gemini-2.0-flash / llama-3.3-70b-versatile / qwen2.5:14b-instruct)")
     parser.add_argument("--embed_model",  default="nomic-embed-text",
                         help="Ollama embedding model (always local)")
-    parser.add_argument("--llm_provider", default="groq", choices=["ollama", "groq"],
-                        help="LLM backend: groq (default) or ollama")
+    parser.add_argument("--llm_provider", default="gemini", choices=["ollama", "groq", "gemini"],
+                        help="LLM backend for summarization AND QA: gemini (default), groq, or ollama")
     parser.add_argument("--groq_api_key", default="",
                         help="Groq API key (or set GROQ_API_KEY env var)")
+    parser.add_argument("--gemini_api_key", default="",
+                        help="Gemini API key (or set GEMINI_API_KEY env var)")
+    parser.add_argument("--tb_max_tokens", type=int, default=500,
+                        help="RAPTOR leaf chunk size in tokens. Larger = fewer leaf "
+                             "nodes = fewer summary API calls (500 cuts calls ~5x vs 100)")
     parser.add_argument("--max_samples",  type=int, default=50,
                         help="Number of FRAMES questions to evaluate (0 = all)")
     parser.add_argument("--output_dir",   default="results/raptor",
