@@ -120,10 +120,17 @@ def extract_letter(text: str) -> str:
 
 
 def gold_to_letter(raw) -> str:
-    if isinstance(raw, int) and 1 <= raw <= 4:
-        return OPTION_LETTERS[raw - 1]
-    if isinstance(raw, str) and raw.strip().upper() in OPTION_LETTERS:
-        return raw.strip().upper()
+    """emozilla/quality `answer` is 0-indexed (0=A,1=B,2=C,3=D)."""
+    if isinstance(raw, bool):           # guard: bool is a subclass of int
+        return str(raw)
+    if isinstance(raw, int) and 0 <= raw <= 3:
+        return OPTION_LETTERS[raw]
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.upper() in OPTION_LETTERS:
+            return s.upper()
+        if s.isdigit() and 0 <= int(s) <= 3:
+            return OPTION_LETTERS[int(s)]
     return str(raw)
 
 
