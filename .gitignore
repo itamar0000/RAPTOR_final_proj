@@ -30,4 +30,4 @@ finetuning_ckpts/
 .idea
 assertion.log
 *.log
-*.db
+*.db.env
