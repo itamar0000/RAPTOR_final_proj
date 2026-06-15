@@ -212,7 +212,9 @@ def build_output_filename(args) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run(args):
-    output_dir = Path(args.output_dir)
+    # Separate outputs per provider so gemini/ollama/groq runs never overwrite
+    # each other: results/raptor/<provider>/...
+    output_dir = Path(args.output_dir) / args.llm_provider
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Descriptive filename so configs don't overwrite each other

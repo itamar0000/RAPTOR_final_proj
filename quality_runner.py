@@ -145,7 +145,9 @@ def build_output_filename(args) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run(args):
-    output_dir = Path(args.output_dir)
+    # Separate outputs per provider so gemini/ollama/groq runs never overwrite
+    # each other: results/quality/<provider>/...
+    output_dir = Path(args.output_dir) / args.llm_provider
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results_path = output_dir / build_output_filename(args)
