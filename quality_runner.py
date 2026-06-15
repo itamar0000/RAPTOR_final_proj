@@ -91,11 +91,22 @@ def extract_letter(text: str) -> str:
 
 
 def gold_to_letter(raw) -> str:
-    """Convert QuALITY gold labels (1-indexed int or letter string) to A/B/C/D."""
-    if isinstance(raw, int) and 1 <= raw <= 4:
-        return OPTION_LETTERS[raw - 1]
-    if isinstance(raw, str) and raw.strip().upper() in OPTION_LETTERS:
-        return raw.strip().upper()
+    """Convert QuALITY gold labels to A/B/C/D.
+
+    emozilla/quality stores `answer` as a 0-indexed int (0=A, 1=B, 2=C, 3=D),
+    which matches our prompt's option order (A = first option). A previous
+    1-indexed assumption made every gold label off-by-one and turned 0 into "0".
+    """
+    if isinstance(raw, bool):           # guard: bool is a subclass of int
+        return str(raw)
+    if isinstance(raw, int) and 0 <= raw <= 3:
+        return OPTION_LETTERS[raw]
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.upper() in OPTION_LETTERS:
+            return s.upper()
+        if s.isdigit() and 0 <= int(s) <= 3:
+            return OPTION_LETTERS[int(s)]
     return str(raw)
 
 
