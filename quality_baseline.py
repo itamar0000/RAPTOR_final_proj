@@ -147,6 +147,14 @@ def format_mc_question(question: str, options: list) -> str:
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Default LLM model per provider (used when --llm_model is left blank), matching
+# quality_runner so the baseline reader is identical to the RAPTOR reader.
+DEFAULT_MODELS = {
+    "groq":   "llama-3.3-70b-versatile",
+    "ollama": "qwen2.5:14b-instruct",
+}
+
+
 def build_output_filename(args) -> str:
     return f"quality_baseline_top{args.top_k}_results.jsonl"
 
@@ -158,7 +166,12 @@ def _flush(results, path):
 
 
 def run(args):
-    output_dir = Path(args.output_dir)
+    # Resolve the reader model: blank --llm_model -> provider default.
+    args.llm_model = args.llm_model or DEFAULT_MODELS[args.llm_provider]
+    log.info("Baseline reader: provider=%s model=%s", args.llm_provider, args.llm_model)
+
+    # Separate outputs per provider so gemini/ollama/groq runs never overwrite.
+    output_dir = Path(args.output_dir) / args.llm_provider
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / build_output_filename(args)
     log.info("Results -> %s", results_path)
@@ -289,7 +302,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="QuALITY baseline — plain chunking + cosine retrieval, no RAPTOR tree"
     )
-    parser.add_argument("--llm_model",    default="llama-3.3-70b-versatile")
+    parser.add_argument("--llm_model",    default="",
+                        help="blank = provider default (ollama: qwen2.5:14b-instruct, groq: llama-3.3-70b-versatile)")
     parser.add_argument("--embed_model",  default="nomic-embed-text")
     parser.add_argument("--llm_provider", default="groq", choices=["ollama", "groq"])
     parser.add_argument("--groq_api_key", default="")

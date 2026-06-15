@@ -217,8 +217,17 @@ def _flush(results, path):
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
+DEFAULT_MODELS = {
+    "groq":   "llama-3.3-70b-versatile",
+    "ollama": "qwen2.5:14b-instruct",
+}
+
+
 def run(args):
-    output_dir = Path(args.output_dir)
+    args.llm_model = args.llm_model or DEFAULT_MODELS[args.llm_provider]
+    log.info("Baseline reader: provider=%s model=%s", args.llm_provider, args.llm_model)
+
+    output_dir = Path(args.output_dir) / args.llm_provider
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / f"frames_baseline_top{args.top_k}_results.jsonl"
     log.info("Results -> %s", results_path)
@@ -341,7 +350,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="FRAMES baseline — flat cosine chunking, no RAPTOR tree"
     )
-    parser.add_argument("--llm_model",   default="llama-3.3-70b-versatile")
+    parser.add_argument("--llm_model",   default="",
+                        help="blank = provider default (ollama: qwen2.5:14b-instruct, groq: llama-3.3-70b-versatile)")
     parser.add_argument("--llm_provider", default="groq", choices=["ollama", "groq"])
     parser.add_argument("--groq_api_key", default="")
     parser.add_argument("--embed_model", default="nomic-embed-text")
