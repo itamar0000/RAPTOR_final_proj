@@ -172,3 +172,33 @@ class OllamaEmbedding(BaseEmbeddingModel):
         if isinstance(embeddings[0], list):
             return embeddings[0]
         return embeddings
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Standalone one-shot chat helper (mirrors groq_ask / gemini_ask)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def ollama_ask(
+    context: str,
+    question: str,
+    model: str,
+    system_prompt: str = "",
+    max_tokens: int = 256,
+    temperature: float = 0.1,
+    base_url: str = OLLAMA_BASE_URL,
+) -> str:
+    """One-off Ollama chat call with a caller-supplied system prompt."""
+    if not system_prompt:
+        system_prompt = "You are a helpful assistant. Answer using only the context."
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"},
+        ],
+        "options": {"temperature": temperature, "num_predict": max_tokens},
+        "stream": False,
+    }
+    resp = requests.post(f"{base_url}/api/chat", json=payload, timeout=120)
+    resp.raise_for_status()
+    return resp.json()["message"]["content"].strip()

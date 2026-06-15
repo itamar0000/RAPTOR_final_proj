@@ -16,11 +16,9 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ollama_models import OllamaQA, OllamaEmbedding
-from groq_models import GroqQA
-from gemini_models import GeminiQA
 from metrics import max_token_f1
 from hf_utils import robust_load
+from concise_qa import make_concise_qa
 # reuse the chunking / embedding helpers from the QuALITY baseline
 from quality_baseline import chunk_text, embed, cosine_similarity
 from qasper_runner import qasper_document_text, iter_questions
@@ -36,13 +34,9 @@ DEFAULT_MODELS = {
 
 
 def make_qa(args):
-    import os
     model = args.llm_model or DEFAULT_MODELS[args.llm_provider]
-    if args.llm_provider == "gemini":
-        return GeminiQA(api_key=args.gemini_api_key or os.environ.get("GEMINI_API_KEY", ""), model=model), model
-    if args.llm_provider == "groq":
-        return GroqQA(api_key=args.groq_api_key or os.environ.get("GROQ_API_KEY", ""), model=model), model
-    return OllamaQA(model=model), model
+    qa = make_concise_qa(args.llm_provider, model, args.groq_api_key, args.gemini_api_key)
+    return qa, model
 
 
 def _flush(results, path):

@@ -29,6 +29,7 @@ from gemini_models import GeminiSummarizer, GeminiQA
 from summary_logger import SummaryLogger
 from metrics import max_token_f1
 from hf_utils import robust_load, to_list_of_dicts
+from concise_qa import make_concise_qa
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -112,18 +113,18 @@ def build_config(args, output_dir):
     import os
     if args.llm_provider == "gemini":
         api_key = args.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
-        log.info("Summarizer + QA: Gemini (%s)", model)
+        log.info("Summarizer: Gemini (%s) | QA: concise", model)
         summarizer = GeminiSummarizer(api_key=api_key, model=model)
-        qa_model   = GeminiQA(api_key=api_key, model=model)
     elif args.llm_provider == "groq":
         api_key = args.groq_api_key or os.environ.get("GROQ_API_KEY", "")
-        log.info("Summarizer + QA: Groq (%s)", model)
+        log.info("Summarizer: Groq (%s) | QA: concise", model)
         summarizer = GroqSummarizer(api_key=api_key, model=model)
-        qa_model   = GroqQA(api_key=api_key, model=model)
     else:
-        log.info("Summarizer + QA: Ollama (%s)", model)
+        log.info("Summarizer: Ollama (%s) | QA: concise", model)
         summarizer = OllamaSummarizer(model=model)
-        qa_model   = OllamaQA(model=model)
+
+    # Free-form QA must be SHORT for token-F1 to be meaningful.
+    qa_model = make_concise_qa(args.llm_provider, model, args.groq_api_key, args.gemini_api_key)
 
     if args.save_summaries:
         summaries_path = args.summaries_file or (
