@@ -27,7 +27,17 @@ import time
 import logging
 import threading
 import requests
+from pathlib import Path
 from raptor import BaseSummarizationModel, BaseQAModel
+
+# Auto-load .env from the project root (works without python-dotenv installed)
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +131,18 @@ def _groq_chat(
         except requests.exceptions.Timeout:
             log.warning("Groq timeout (attempt %d/%d) — retrying in %.0f s",
                         attempt, max_retries, backoff)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 300)
+
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 401:
+                raise RuntimeError(
+                    "Groq API key is invalid or missing. "
+                    "Check your .env file or pass --groq_api_key."
+                ) from e
+            log.warning("Groq HTTP error (attempt %d/%d): %s", attempt, max_retries, e)
+            if attempt == max_retries:
+                raise
             time.sleep(backoff)
             backoff = min(backoff * 2, 300)
 
