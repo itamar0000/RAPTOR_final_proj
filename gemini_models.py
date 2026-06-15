@@ -97,10 +97,18 @@ def _gemini_chat(
     temperature: float = 0.1,
     max_tokens: int = 512,
     max_retries: int = 6,
+    thinking_budget: int = 0,
 ) -> str:
     """
     Call Gemini :generateContent with rate-limit-aware retry.
     Returns the assistant message text.
+
+    thinking_budget: Gemini 2.5 models "think" by default, and those thinking
+      tokens are charged against maxOutputTokens — so a small budget (e.g. 100
+      for summaries) gets entirely consumed by thinking and returns an EMPTY
+      response (finishReason=MAX_TOKENS). We set thinkingBudget=0 to disable
+      thinking, which is correct for summarization and direct QA. Use -1 for
+      dynamic thinking, or a positive token count to cap it.
     """
     url = f"{GEMINI_BASE_URL}/{model}:generateContent"
     headers = {
@@ -114,6 +122,7 @@ def _gemini_chat(
         "generationConfig": {
             "temperature": temperature,
             "maxOutputTokens": max_tokens,
+            "thinkingConfig": {"thinkingBudget": thinking_budget},
         },
     }
     if system_prompt:
@@ -228,6 +237,7 @@ class GeminiSummarizer(BaseSummarizationModel):
         api_key: str = "",
         model: str = "gemini-2.5-flash",
         temperature: float = 0.1,
+        thinking_budget: int = 0,
     ):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         if not self.api_key:
@@ -236,6 +246,7 @@ class GeminiSummarizer(BaseSummarizationModel):
             )
         self.model = model
         self.temperature = temperature
+        self.thinking_budget = thinking_budget
 
     def summarize(self, context: str, max_tokens: int = 150) -> str:
         user_prompt = (
@@ -244,6 +255,7 @@ class GeminiSummarizer(BaseSummarizationModel):
         return _gemini_chat(
             self.SYSTEM_PROMPT, user_prompt, self.model, self.api_key,
             temperature=self.temperature, max_tokens=max_tokens,
+            thinking_budget=self.thinking_budget,
         )
 
 
@@ -269,6 +281,7 @@ class GeminiQA(BaseQAModel):
         model: str = "gemini-2.5-flash",
         temperature: float = 0.1,
         max_tokens: int = 512,
+        thinking_budget: int = 0,
     ):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         if not self.api_key:
@@ -278,6 +291,7 @@ class GeminiQA(BaseQAModel):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.thinking_budget = thinking_budget
 
     def answer_question(self, context: str, question: str) -> str:
         user_prompt = (
@@ -288,6 +302,7 @@ class GeminiQA(BaseQAModel):
         return _gemini_chat(
             self.SYSTEM_PROMPT, user_prompt, self.model, self.api_key,
             temperature=self.temperature, max_tokens=self.max_tokens,
+            thinking_budget=self.thinking_budget,
         )
 
 
