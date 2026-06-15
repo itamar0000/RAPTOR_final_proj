@@ -47,7 +47,7 @@ from summary_logger import SummaryLogger
 
 # Default LLM model per provider (used when --llm_model is left blank)
 DEFAULT_MODELS = {
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-2.5-flash-lite",
     "groq":   "llama-3.3-70b-versatile",
     "ollama": "qwen2.5:14b-instruct",
 }
@@ -280,21 +280,25 @@ def run(args):
     log.info("Fields -> question:'%s'  answer:'%s'  links:'%s'",
              question_field, answer_field, links_field)
 
-    # ── Resume: load already-completed rows, skip them below ──────────────────
-    already_done = 0
+    # ── Resume: keep SUCCESSFUL rows, retry rows that errored (e.g. 503) ──────
+    done_idx = set()
     results = []
     if args.resume and results_path.exists():
+        loaded = []
         with open(results_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    results.append(json.loads(line))
-        already_done = len(results)
-        log.info("Resume mode: skipping first %d already-completed rows", already_done)
+                    loaded.append(json.loads(line))
+        done_idx = {r["idx"] for r in loaded if "idx" in r and not r.get("error")}
+        results = [r for r in loaded if not r.get("error")]
+        n_err = len(loaded) - len(results)
+        log.info("Resume mode: %d completed rows kept, %d error rows will be retried",
+                 len(done_idx), n_err)
 
     for idx, row in enumerate(tqdm(ds, desc="FRAMES questions")):
-        if idx < already_done:
-            continue  # already processed in a previous run
+        if idx in done_idx:
+            continue  # already completed successfully (resume mode)
 
         question    = row[question_field]
         gold_answer = row[answer_field]
@@ -352,6 +356,7 @@ def run(args):
             continue
 
         results.append({
+            "idx":           idx,
             "question":      question,
             "gold_answer":   gold_answer,
             "raptor_answer": final_answer,

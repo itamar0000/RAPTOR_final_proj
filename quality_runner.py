@@ -44,7 +44,7 @@ from summary_logger import SummaryLogger
 
 # Default LLM model per provider (used when --llm_model is left blank)
 DEFAULT_MODELS = {
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-2.5-flash-lite",
     "groq":   "llama-3.3-70b-versatile",
     "ollama": "qwen2.5:14b-instruct",
 }
@@ -122,17 +122,22 @@ def run(args):
     results_path = output_dir / build_output_filename(args)
     log.info("Results will be saved to: %s", results_path)
 
-    # ── Resume: load already-completed rows ──────────────────────────────────
-    already_done = 0
+    # ── Resume: keep SUCCESSFUL rows, retry rows that errored (e.g. 503) ──────
+    done_idx = set()
     existing_results = []
     if args.resume and results_path.exists():
+        loaded = []
         with open(results_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    existing_results.append(json.loads(line))
-        already_done = len(existing_results)
-        log.info("Resume mode: skipping first %d already-completed rows", already_done)
+                    loaded.append(json.loads(line))
+        # Only treat error-free rows as done; drop error rows so they re-run.
+        done_idx = {r["idx"] for r in loaded if not r.get("error")}
+        existing_results = [r for r in loaded if not r.get("error")]
+        n_err = len(loaded) - len(existing_results)
+        log.info("Resume mode: %d completed rows kept, %d error rows will be retried",
+                 len(done_idx), n_err)
 
     # ── Build RAPTOR config ──────────────────────────────────────────────────
     import os
@@ -204,8 +209,8 @@ def run(args):
     correct = sum(1 for r in results if r.get("correct"))
 
     for idx, row in enumerate(tqdm(ds, desc="QuALITY questions", total=n_total)):
-        if idx < already_done:
-            continue  # skip completed rows in resume mode
+        if idx in done_idx:
+            continue  # skip rows already completed successfully (resume mode)
 
         article      = row.get(article_field, "") or ""
         question     = row.get(question_field, "") if question_field else ""
