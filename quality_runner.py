@@ -73,17 +73,35 @@ def format_mc_question(question: str, options: list) -> str:
 def extract_letter(text: str) -> str:
     """
     Pull the predicted A/B/C/D out of a free-form model response.
-    Falls back through three strategies in order of confidence.
+
+    The model states its FINAL choice last (often as \\boxed{X} or "Final
+    answer: X"), but its reasoning mentions other options along the way
+    ("ruling out option C"). So we look for explicit final-answer markers
+    first and take the LAST match; only then fall back to looser heuristics.
     """
     text = text.strip()
-    # Strategy 1: response starts with the letter (most reliable)
-    if text and text[0].upper() in OPTION_LETTERS:
+    if not text:
+        return ""
+
+    # 1. LaTeX \boxed{X} — the model's most common final-answer format
+    boxed = re.findall(r"\\boxed\{\s*([A-D])\b", text)
+    if boxed:
+        return boxed[-1].upper()
+
+    # 2. "final answer ... X" / "the answer is X" / "answer: X" — last occurrence.
+    #    Allow a few wrapper chars (": ", "is ", "$\boxed{") between the cue and letter.
+    ans = re.findall(
+        r"(?:final\s+answer|the\s+answer\s+is|answer)\b[^A-Za-z0-9\n]{0,12}([A-D])\b",
+        text, re.IGNORECASE,
+    )
+    if ans:
+        return ans[-1].upper()
+
+    # 3. Response *starts* with a standalone letter (e.g. "B" or "B.")
+    if text[0].upper() in OPTION_LETTERS and (len(text) == 1 or not text[1].isalpha()):
         return text[0].upper()
-    # Strategy 2: explicit "Answer: X" / "The answer is X" pattern
-    m = re.search(r"\b(?:answer(?:\s+is)?|option|choice)[:\s]+([A-D])\b", text, re.IGNORECASE)
-    if m:
-        return m.group(1).upper()
-    # Strategy 3: any standalone letter near end of response
+
+    # 4. Last standalone A-D anywhere (the final choice is usually stated last)
     matches = re.findall(r"\b([A-D])\b", text)
     if matches:
         return matches[-1].upper()

@@ -12,6 +12,7 @@ Usage:
     python rescore_quality.py <file> --split train --write   # also rewrite file with fixed gold/correct
 """
 
+import re
 import json
 import argparse
 from pathlib import Path
@@ -19,6 +20,28 @@ from pathlib import Path
 from datasets import load_dataset
 
 OPTION_LETTERS = ["A", "B", "C", "D"]
+
+
+def extract_letter(text: str) -> str:
+    """Same robust extractor as quality_runner — re-parse the saved raw_answer."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    boxed = re.findall(r"\\boxed\{\s*([A-D])\b", text)
+    if boxed:
+        return boxed[-1].upper()
+    ans = re.findall(
+        r"(?:final\s+answer|the\s+answer\s+is|answer)\b[^A-Za-z0-9\n]{0,12}([A-D])\b",
+        text, re.IGNORECASE,
+    )
+    if ans:
+        return ans[-1].upper()
+    if text[0].upper() in OPTION_LETTERS and (len(text) == 1 or not text[1].isalpha()):
+        return text[0].upper()
+    matches = re.findall(r"\b([A-D])\b", text)
+    if matches:
+        return matches[-1].upper()
+    return ""
 
 
 def gold_to_letter(raw) -> str:
@@ -54,7 +77,10 @@ def main():
     for r in rows:
         idx = r.get("idx")
         true_gold = gold_by_idx.get(idx, r.get("gold_letter", ""))
-        pred = r.get("predicted_letter", "")
+        # Re-extract from the saved raw_answer with the fixed extractor; fall back
+        # to the stored predicted_letter if there's no raw_answer to parse.
+        pred = extract_letter(r.get("raw_answer", "")) or r.get("predicted_letter", "")
+        r["predicted_letter"] = pred
         if r.get("error"):
             errors += 1
         if pred:

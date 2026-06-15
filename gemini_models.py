@@ -280,7 +280,7 @@ class GeminiQA(BaseQAModel):
         api_key: str = "",
         model: str = "gemini-2.5-flash",
         temperature: float = 0.1,
-        max_tokens: int = 512,
+        max_tokens: int = 1024,   # MC reasoning + final letter; 512 truncated some answers
         thinking_budget: int = 0,
     ):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
