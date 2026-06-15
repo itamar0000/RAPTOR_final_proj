@@ -187,7 +187,7 @@ def run(args):
         n_total = min(args.max_samples, n_total)
         ds = ds.select(range(n_total))
     log.info("Dataset size: %d  |  Already done: %d  |  Remaining: %d",
-             n_total, already_done, n_total - already_done)
+             n_total, len(done_idx), n_total - len(done_idx))
 
     # ── Auto-detect column names ─────────────────────────────────────────────
     cols = ds.column_names
