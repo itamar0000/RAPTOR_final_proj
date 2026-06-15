@@ -270,9 +270,22 @@ def run(args):
     log.info("Fields -> question:'%s'  answer:'%s'  links:'%s'",
              question_field, answer_field, links_field)
 
+    # ── Resume: load already-completed rows, skip them below ──────────────────
+    already_done = 0
     results = []
+    if args.resume and results_path.exists():
+        with open(results_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    results.append(json.loads(line))
+        already_done = len(results)
+        log.info("Resume mode: skipping first %d already-completed rows", already_done)
 
-    for row in tqdm(ds, desc="FRAMES questions"):
+    for idx, row in enumerate(tqdm(ds, desc="FRAMES questions")):
+        if idx < already_done:
+            continue  # already processed in a previous run
+
         question    = row[question_field]
         gold_answer = row[answer_field]
         raw_links   = row[links_field] if links_field else None
@@ -290,6 +303,7 @@ def run(args):
                 "use_late_chunking": args.use_late_chunking,
                 "error":         "no_wiki_links",
             })
+            _flush(results, results_path)
             continue
 
         try:
@@ -305,6 +319,7 @@ def run(args):
                     "use_late_chunking": args.use_late_chunking,
                     "error":         "all_articles_empty",
                 })
+                _flush(results, results_path)
                 continue
 
             final_answer = ra.answer_question(question=question)
@@ -321,6 +336,7 @@ def run(args):
                 "use_late_chunking": args.use_late_chunking,
                 "error":         "exception: " + str(e),
             })
+            _flush(results, results_path)
             continue
 
         results.append({
@@ -332,14 +348,11 @@ def run(args):
             "use_reranker":  args.use_reranker,
             "use_late_chunking": args.use_late_chunking,
         })
+        _flush(results, results_path)
 
         time.sleep(0.3)
 
-    # Save results
-    with open(results_path, "w", encoding="utf-8") as f:
-        for r in results:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-
+    # Final results are already on disk via _flush after every sample.
     answered = sum(1 for r in results if r.get("raptor_answer"))
     log.info(
         "Done. %d total | %d answered | mode=%s | reranker=%s | late_chunking=%s | saved -> %s",
@@ -350,6 +363,13 @@ def run(args):
 
     if args.score:
         _score_with_ragas(results, output_dir, args)
+
+
+def _flush(results, path):
+    """Write all results to disk after every sample — safe against stop/crash."""
+    with open(path, "w", encoding="utf-8") as f:
+        for r in results:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -425,6 +445,8 @@ if __name__ == "__main__":
                         help="Directory to save results JSONL")
     parser.add_argument("--score",        action="store_true",
                         help="Run Ragas scoring after evaluation")
+    parser.add_argument("--resume",       action="store_true",
+                        help="Skip rows already saved in the output file (continue a stopped run)")
 
     # ── NEW retrieval flags ───────────────────────────────────────────────────
     parser.add_argument(
