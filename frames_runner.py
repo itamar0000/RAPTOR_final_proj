@@ -43,6 +43,7 @@ from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
 from ollama_models import OllamaSummarizer, OllamaQA, OllamaEmbedding
 from groq_models import GroqSummarizer, GroqQA
 from gemini_models import GeminiSummarizer, GeminiQA
+from summary_logger import SummaryLogger
 
 # Default LLM model per provider (used when --llm_model is left blank)
 DEFAULT_MODELS = {
@@ -240,6 +241,15 @@ def run(args):
         summarizer = OllamaSummarizer(model=model)
         qa_model   = OllamaQA(model=model)
 
+    # Optionally wrap the summarizer to log every (context -> summary) pair,
+    # so you can inspect whether bad answers stem from bad summaries.
+    if args.save_summaries:
+        summaries_path = args.summaries_file or (
+            output_dir / build_output_filename(args).replace("results.jsonl", "summaries.jsonl")
+        )
+        summarizer = SummaryLogger(summarizer, summaries_path, reset=not args.resume)
+        log.info("Logging summaries to: %s", summaries_path)
+
     config = RetrievalAugmentationConfig(
         summarization_model=summarizer,
         qa_model=qa_model,
@@ -306,6 +316,8 @@ def run(args):
             _flush(results, results_path)
             continue
 
+        if args.save_summaries:
+            summarizer.tag = f"frames{idx}"
         try:
             ra = build_unified_tree(wiki_links, config, args.use_late_chunking)
             if ra is None:
@@ -447,6 +459,12 @@ if __name__ == "__main__":
                         help="Run Ragas scoring after evaluation")
     parser.add_argument("--resume",       action="store_true",
                         help="Skip rows already saved in the output file (continue a stopped run)")
+    parser.add_argument("--save_summaries", action="store_true",
+                        help="Log every RAPTOR (context -> summary) pair to console "
+                             "and a JSONL file, to inspect summary quality")
+    parser.add_argument("--summaries_file", default="",
+                        help="Where to write summaries (default: alongside results, "
+                             "<name>_summaries.jsonl)")
 
     # ── NEW retrieval flags ───────────────────────────────────────────────────
     parser.add_argument(
