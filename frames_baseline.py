@@ -29,6 +29,7 @@ from urllib.parse import unquote
 
 from datasets import load_dataset
 from tqdm import tqdm
+from groq_models import groq_ask
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -288,7 +289,11 @@ def run(args):
 
             top_chunks = retrieve_top_k(question, chunks, args.embed_model, args.top_k)
             context = "\n\n---\n\n".join(top_chunks)
-            answer = ask_llm(context, question, args.llm_model)
+            if args.llm_provider == "groq":
+                api_key = args.groq_api_key or __import__("os").environ.get("GROQ_API_KEY", "")
+                answer = groq_ask(context, question, api_key=api_key, model=args.llm_model)
+            else:
+                answer = ask_llm(context, question, args.llm_model)
 
         except Exception as e:
             log.warning("Error row %d '%s': %s", idx, question[:60], e, exc_info=True)
@@ -336,7 +341,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="FRAMES baseline — flat cosine chunking, no RAPTOR tree"
     )
-    parser.add_argument("--llm_model",   default="qwen2.5:7b-instruct")
+    parser.add_argument("--llm_model",   default="llama-3.3-70b-versatile")
+    parser.add_argument("--llm_provider", default="groq", choices=["ollama", "groq"])
+    parser.add_argument("--groq_api_key", default="")
     parser.add_argument("--embed_model", default="nomic-embed-text")
     parser.add_argument("--max_samples", type=int, default=100)
     parser.add_argument("--output_dir",  default="results/frames_baseline")

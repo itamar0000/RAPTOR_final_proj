@@ -41,6 +41,7 @@ from tqdm import tqdm
 
 from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
 from ollama_models import OllamaSummarizer, OllamaQA, OllamaEmbedding
+from groq_models import GroqSummarizer, GroqQA
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -211,9 +212,19 @@ def run(args):
     log.info(f"Results will be saved to: {results_path}")
 
     # ── Build config with all new retrieval flags ─────────────────────────────
+    if args.llm_provider == "groq":
+        api_key = args.groq_api_key or __import__("os").environ.get("GROQ_API_KEY", "")
+        log.info("Using Groq API (model=%s)", args.llm_model)
+        summarizer = GroqSummarizer(api_key=api_key, model=args.llm_model)
+        qa_model   = GroqQA(api_key=api_key, model=args.llm_model)
+    else:
+        log.info("Using Ollama (model=%s)", args.llm_model)
+        summarizer = OllamaSummarizer(model=args.llm_model)
+        qa_model   = OllamaQA(model=args.llm_model)
+
     config = RetrievalAugmentationConfig(
-        summarization_model=OllamaSummarizer(model=args.llm_model),
-        qa_model=OllamaQA(model=args.llm_model),
+        summarization_model=summarizer,
+        qa_model=qa_model,
         embedding_model=OllamaEmbedding(model=args.embed_model),
     )
     # Store retrieval flags as plain attributes — the RAPTOR library doesn't
@@ -374,10 +385,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="RAPTOR on FRAMES benchmark with configurable retrieval"
     )
-    parser.add_argument("--llm_model",    default="qwen2.5:7b-instruct",
-                        help="Ollama LLM for summarization and QA")
+    parser.add_argument("--llm_model",    default="llama-3.3-70b-versatile",
+                        help="LLM model name (Ollama model or Groq model id)")
     parser.add_argument("--embed_model",  default="nomic-embed-text",
-                        help="Ollama embedding model")
+                        help="Ollama embedding model (always local)")
+    parser.add_argument("--llm_provider", default="groq", choices=["ollama", "groq"],
+                        help="LLM backend: groq (default) or ollama")
+    parser.add_argument("--groq_api_key", default="",
+                        help="Groq API key (or set GROQ_API_KEY env var)")
     parser.add_argument("--max_samples",  type=int, default=50,
                         help="Number of FRAMES questions to evaluate (0 = all)")
     parser.add_argument("--output_dir",   default="results/raptor",

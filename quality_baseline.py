@@ -26,6 +26,7 @@ import numpy as np
 from pathlib import Path
 from datasets import load_dataset
 from tqdm import tqdm
+from groq_models import groq_ask
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -227,7 +228,11 @@ def run(args):
             context = "\n\n---\n\n".join(top_chunks)
 
             mc_question = format_mc_question(question, options)
-            raw_answer = ask_llm(context, mc_question, args.llm_model)
+            if args.llm_provider == "groq":
+                api_key = args.groq_api_key or __import__("os").environ.get("GROQ_API_KEY", "")
+                raw_answer = groq_ask(context, mc_question, api_key=api_key, model=args.llm_model)
+            else:
+                raw_answer = ask_llm(context, mc_question, args.llm_model)
             predicted_letter = extract_letter(raw_answer)
             is_correct = (predicted_letter == gold_letter)
 
@@ -277,8 +282,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="QuALITY baseline — plain chunking + cosine retrieval, no RAPTOR tree"
     )
-    parser.add_argument("--llm_model",    default="llama3.1:8b")
+    parser.add_argument("--llm_model",    default="llama-3.3-70b-versatile")
     parser.add_argument("--embed_model",  default="nomic-embed-text")
+    parser.add_argument("--llm_provider", default="groq", choices=["ollama", "groq"])
+    parser.add_argument("--groq_api_key", default="")
     parser.add_argument("--max_samples",  type=int, default=100, help="0 = full dataset")
     parser.add_argument("--split",        default="train",
                         choices=["train", "validation", "test"])
